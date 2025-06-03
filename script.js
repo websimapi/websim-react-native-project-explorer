@@ -11,10 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const buildOutputContainer = document.getElementById('build-output-container');
     const buildLogElement = document.getElementById('build-log');
 
+    // Define known missing files that are part of the core structure
+    const placeholderFileContent = (fileName) => `// Placeholder for ${fileName}\n// Content not provided in initial setup.\nexport default function ${fileName.replace('.tsx', '')}() { console.warn("${fileName} is a placeholder."); return null; };`;
+
     const initialProjectStructure = [
         { name: 'App.tsx', path: 'App.tsx', type: 'file' },
         { name: 'global.d.ts', path: 'global.d.ts', type: 'file' },
-        { name: 'index.js', path: 'index.js', type: 'file' },
+        { name: 'index.js', path: 'index.js', type: 'file' }, // Expo entry point
         {
             name: 'app', type: 'folder', children: [
                 { name: '_layout.tsx', path: 'app/_layout.tsx', type: 'file' },
@@ -39,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     name: 'components', type: 'folder', children: [
                         {
                             name: 'Feed', type: 'folder', children: [
-                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', missing: true }, // Mark as potentially missing if not provided
+                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx'), isPlaceholder: true },
                                 { name: 'FeedHeader.tsx', path: 'src/components/Feed/FeedHeader.tsx', type: 'file' },
                                 { name: 'FeedScreen.tsx', path: 'src/components/Feed/FeedScreen.tsx', type: 'file' },
                                 { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file' },
@@ -52,8 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 {
                     name: 'navigation', type: 'folder', children: [
-                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', missing: true }, // Mark as potentially missing
-                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', missing: true }, // Mark as potentially missing
+                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx'), isPlaceholder: true },
+                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx'), isPlaceholder: true },
                     ]
                 },
                 {
@@ -66,14 +69,16 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     let currentProjectStructure = JSON.parse(JSON.stringify(initialProjectStructure));
+    const fileContentCache = new Map();
+
 
     function renderFileTree(parentElement, structure) {
         structure.forEach(item => {
             const li = document.createElement('li');
             li.classList.add('tree-item');
-            if (item.missing) { // Visually indicate missing files if desired
+            if (item.isPlaceholder || item.missing) { // Visually indicate missing/placeholder files
                 li.style.opacity = "0.6";
-                li.title = "File content not provided in initial setup";
+                li.title = item.isPlaceholder ? "File content is a placeholder" : "File content not provided";
             }
 
             const span = document.createElement('span');
@@ -81,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (item.type === 'folder') {
                 span.classList.add('folder-name');
-                if (item.name === 'build') { // Special icon for build folder
+                if (item.name === 'build') { 
                     span.textContent = '📦 ' + item.name;
                 } else {
                      span.textContent = '📁 ' + item.name;
@@ -92,15 +97,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderFileTree(subUl, item.children);
                 }
                 li.appendChild(subUl);
-                // Basic folder collapse/expand
-                span.addEventListener('click', () => {
+                span.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     subUl.style.display = subUl.style.display === 'none' ? 'block' : 'none';
                 });
 
             } else {
                 span.classList.add('file-name');
                 const extension = item.name.split('.').pop();
-                span.classList.add(extension); // for specific file type icons via CSS
+                span.classList.add(extension); 
                 li.appendChild(span);
                 li.addEventListener('click', async (event) => {
                     event.stopPropagation(); 
@@ -109,12 +114,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     li.classList.add('selected');
                     currentSelectedElement = li;
-                    await loadFileContent(item); // Pass the whole item
+                    await loadFileContent(item);
                 });
             }
             parentElement.appendChild(li);
         });
     }
+    
+    async function fetchFileContent(filePath) {
+        if (fileContentCache.has(filePath)) {
+            return fileContentCache.get(filePath);
+        }
+        // Check if content is already in item (e.g., for placeholders or build artifacts)
+        function findItem(structure, path) {
+            for (const item of structure) {
+                if (item.path === path) return item;
+                if (item.children) {
+                    const found = findItem(item.children, path);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+        const item = findItem(currentProjectStructure, filePath);
+        if (item && item.content) {
+            fileContentCache.set(filePath, item.content);
+            return item.content;
+        }
+
+        try {
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
+            }
+            const code = await response.text();
+            fileContentCache.set(filePath, code);
+            return code;
+        } catch (error) {
+            console.error(`Failed to fetch ${filePath}:`, error);
+            throw error;
+        }
+    }
+
 
     async function loadFileContent(item) {
         const fileName = item.name;
@@ -124,44 +165,25 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedFileNameElement.textContent = `Loading ${fileName}...`;
             exportedMembersElement.innerHTML = '';
             codeDisplayElement.textContent = '';
-            iframeClientViewer.srcdoc = ''; // Clear iframe
+            iframeClientViewer.srcdoc = ''; 
             iframeClientViewer.style.display = 'none';
-            codeDisplayContainer.style.display = 'none'; // Hide code view initially
+            codeDisplayContainer.style.display = 'none';
 
-            if (item.isClientIndex && item.content) {
-                selectedFileNameElement.textContent = `${fileName} (Live Preview)`;
-                iframeClientViewer.srcdoc = item.content;
+            let codeToDisplay;
+            if (item.content) { // Directly use content if available (build artifacts, placeholders)
+                codeToDisplay = item.content;
+            } else { // Fetch project files
+                codeToDisplay = await fetchFileContent(filePath);
+            }
+            
+            if (item.isClientIndex) { // Special handling for the built client's index.html
+                selectedFileNameElement.textContent = `${fileName} (Live Preview from Build)`;
+                iframeClientViewer.srcdoc = codeToDisplay;
                 iframeClientViewer.style.display = 'block';
-                exportedMembersElement.innerHTML = '<em>Displaying simulated client application.</em>';
-            } else if (item.content) { // For build artifacts with content (like bundles)
+                exportedMembersElement.innerHTML = '<em>Displaying built client application.</em>';
+            } else {
                 selectedFileNameElement.textContent = fileName;
-                codeDisplayElement.textContent = item.content;
-                codeDisplayContainer.style.display = 'flex'; // Show code view as flex
-                const extension = fileName.split('.').pop();
-                let language = 'plaintext';
-                if (['ts', 'tsx', 'js', 'jsx'].includes(extension)) language = 'javascript';
-                else if (extension === 'html') language = 'html';
-                else if (extension === 'css') language = 'css';
-                else if (extension === 'json') language = 'json';
-                
-                codeDisplayElement.className = `language-${language}`;
-                Prism.highlightElement(codeDisplayElement);
-                extractExportedMembers(item.content, extension);
-            } else if (item.missing) {
-                 selectedFileNameElement.textContent = fileName;
-                 codeDisplayElement.textContent = `// File: ${fileName}\n// Content for this file was not provided in the initial setup.`;
-                 codeDisplayContainer.style.display = 'flex';
-                 codeDisplayElement.className = 'language-typescript'; // Default
-                 Prism.highlightElement(codeDisplayElement);
-                 exportedMembersElement.innerHTML = '<em>File content placeholder.</em>';
-            } else { // For regular project files to be fetched
-                selectedFileNameElement.textContent = fileName;
-                const response = await fetch(filePath);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
-                }
-                const code = await response.text();
-                codeDisplayElement.textContent = code;
+                codeDisplayElement.textContent = codeToDisplay;
                 codeDisplayContainer.style.display = 'flex';
                 
                 const extension = fileName.split('.').pop();
@@ -173,7 +195,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 codeDisplayElement.className = `language-${language}`;
                 Prism.highlightElement(codeDisplayElement);
-                extractExportedMembers(code, extension);
+                if (!item.isBinary && !item.isClientIndex) { // Don't analyze binary files or client index for exports
+                   extractExportedMembers(codeToDisplay, extension);
+                } else if (item.isBinary) {
+                    exportedMembersElement.innerHTML = '<em>Binary file content (simulated). Not analyzed.</em>';
+                }
             }
 
         } catch (error) {
@@ -225,289 +251,272 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderFileTree(fileTreeElement, currentProjectStructure);
 
-    // --- Build Simulation Logic ---
-    const baseMockBuildLogs = [
-        "[INFO] Build process started...",
-        "[INFO] Cleaning previous build artifacts...",
-        "[SUCCESS] Clean complete.",
-        "[INFO] Resolving project dependencies (simulated)...",
-        "[INFO] Found 55 dependencies to check.",
-        "[SUCCESS] All dependencies resolved.",
-        "[INFO] Linting TypeScript and JSX files...",
-        "[SUCCESS] Linting complete. 0 errors, 2 warnings.",
-        "[INFO] Starting Metro bundler (simulated)...",
-        "[INFO] Metro bundler ready on port 8081 (simulated).",
-    ];
+    // --- Actual Build Logic ---
 
-    const artifactGenerationLogs = [
-        "[INFO] Generating web client at build/output/web-client/index.html...",
-        "[PROGRESS] Web client generation: 50% complete...",
-        "[SUCCESS] Web client (build/output/web-client/index.html) generated.",
-        "[INFO] Generating web client assets (build/output/web-client/app.js)...",
-        "[SUCCESS] Web client assets generated.",
-        "[INFO] Bundling JavaScript for Android platform (build/output/android/main.jsbundle)...",
-        "[PROGRESS] Android Bundling: 25% complete...",
-        "[PROGRESS] Android Bundling: 75% complete...",
-        "[SUCCESS] Android JS bundle complete: build/output/android/main.jsbundle",
-        "[INFO] Bundling JavaScript for iOS platform (build/output/ios/main.jsbundle)...",
-        "[PROGRESS] iOS Bundling: 25% complete...",
-        "[PROGRESS] iOS Bundling: 75% complete...",
-        "[SUCCESS] iOS JS bundle complete: build/output/ios/main.jsbundle",
-        "[INFO] Compiling native Android modules (simulated)...",
-        "[SUCCESS] Android native modules compiled.",
-        "[INFO] Generating Android APK (debug)...",
-        "[SUCCESS] Android APK generated: build/output/apk/debug/app-debug.apk (simulated file, not browsable)",
-        "[INFO] Compiling native iOS modules (simulated)...",
-        "[SUCCESS] iOS native modules compiled.",
-        "[INFO] Generating iOS App (debug, simulator)...",
-        "[SUCCESS] iOS App generated: build/output/app/debug/MyApp.app (simulated file, not browsable)",
-        "[INFO] Build process finished successfully.",
-        "[INFO] Total build time: 15.3s (simulated)."
-    ];
-
-
-    let currentLogIndex = 0;
-    let buildInProgress = false;
-    let currentLogsArray = [];
-
-    function appendLogEntry() {
-        if (currentLogIndex < currentLogsArray.length) {
-            const timestamp = new Date().toLocaleTimeString();
-            buildLogElement.textContent += `[${timestamp}] ${currentLogsArray[currentLogIndex]}\n`;
-            buildLogElement.scrollTop = buildLogElement.scrollHeight; 
-            currentLogIndex++;
-            setTimeout(appendLogEntry, Math.random() * 200 + 50); 
-        } else {
-            buildLogElement.textContent += `\nBuild simulation complete. You can now browse the 'build' folder in the file tree.\n`;
-            buildLogElement.scrollTop = buildLogElement.scrollHeight;
-            buildInProgress = false;
-            buildProjectButton.disabled = false;
-            buildProjectButton.textContent = 'Build Project';
-        }
+    function logToBuildOutput(message, type = "INFO") {
+        const timestamp = new Date().toLocaleTimeString();
+        buildLogElement.textContent += `[${timestamp}] [${type}] ${message}\n`;
+        buildLogElement.scrollTop = buildLogElement.scrollHeight;
     }
 
-    function generateMockFileContent() {
-        const mockClientHTML = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulated Built Client</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #282c34; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
-        .app-header { background-color: #61dafb; padding: 20px; width: 100%; box-sizing: border-box; }
-        .app-header img { height: 40px; vertical-align: middle; margin-right: 10px; animation: spin 2s linear infinite; }
-        .app-header h1 { display: inline; margin: 0; font-size: 1.8em; color: #20232a; }
-        .app-content { padding: 30px; }
-        .app-content p { font-size: 1.1em; line-height: 1.6; }
-        .app-content button { background-color: #61dafb; color: #20232a; border: none; padding: 10px 20px; font-size: 1em; border-radius: 5px; cursor: pointer; margin-top: 20px; transition: background-color 0.3s; }
-        .app-content button:hover { background-color: #52c2e0; }
-        .client-log { margin-top: 20px; padding: 15px; background-color: rgba(255,255,255,0.1); border-radius: 5px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; text-align: left; max-height: 150px; overflow-y: auto; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
-    <header class="app-header">
-        <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0xMS41IC0xMC4yMzE3NCAyMyAyMC40NjM0OCI+CiAgPHRpdGxlPlJlYWN0IExvZ288L3RpdGxlPgogIDxjaXJjbGUgY3g9IjAiIGN5PSIwIiByPSIyLjA1IiBmaWxsPSIjNjFkYWZiIi8+CiAgPGcgc3Ryb2tlPSIjNjFkYWZiIiBzdHJva2Utd2lkdGg9IjEiIGZpbGw9Im5vbmUiPgogICAgPGVsbGlwc2Ugcng9IjExIiByeT0iNC4yIi8+CiAgICA8ZWxsaXBzZSByeD0iMTEiIHJ5PSI0LjIiIHRyYW5zZm9ybT0icm90YXRlKDYwKSIvPgogICAgPGVsbGlwc2Ugcng9IjExIiByeT0iNC4yIiB0cmFuc2Zvcm09InJvdGF0ZSgxMjApIi8+CiAgPC9nPgo8L3N2Zz4K" alt="React Logo">
-        <h1>Simulated React Native Web Client</h1>
-    </header>
-    <main class="app-content">
-        <p>Welcome to your built application! This is a simplified representation.</p>
-        <button id="actionButton">Click Me!</button>
-        <div class="client-log" id="clientLogOutput"></div>
-    </main>
-    <script>
-        const logOutput = document.getElementById('clientLogOutput');
-        function logToClient(message) {
-            const p = document.createElement('p');
-            p.textContent = \`[\${new Date().toLocaleTimeString()}] \${message}\`;
-            logOutput.appendChild(p);
-            logOutput.scrollTop = logOutput.scrollHeight;
+    // Helper function to resolve relative paths to project-absolute paths
+    // Returns path without extension initially, caller should handle extension variants
+    function resolveProjectPath(relativePath, currentFilePath) {
+        const currentDirSegments = currentFilePath.split('/').slice(0, -1);
+        const pathSegments = relativePath.split('/');
+        const resolvedSegments = [...currentDirSegments];
+
+        for (const segment of pathSegments) {
+            if (segment === '.') continue;
+            if (segment === '..') {
+                if (resolvedSegments.length > 0) resolvedSegments.pop();
+            } else {
+                resolvedSegments.push(segment);
+            }
         }
-        logToClient("Client application initialized.");
-        logToClient("Simulated app.js (bundle) loaded.");
-
-        document.getElementById('actionButton').addEventListener('click', () => {
-            logToClient("Button clicked! Performing action...");
-            alert("Action performed in simulated client!");
-        });
-
-        // Simulate some async operations or component loading
-        setTimeout(() => {
-            logToClient("Async data loaded (simulated).");
-        }, 1500);
-        setTimeout(() => {
-            logToClient("UI components rendered (simulated).");
-        }, 2500);
-    </script>
-</body>
-</html>`;
-        const mockJSBundle = `
-// Simulated JavaScript Bundle (app.js / main.jsbundle)
-// Version: 1.0.0
-// Build Timestamp: ${new Date().toISOString()}
-
-(function() {
-"use strict";
-
-console.log("[Bundle] Initializing application...");
-
-// Simulate some module definitions
-const AppConfig = {
-  appName: "SimulatedApp",
-  version: "1.0.0",
-  apiEndpoint: "/api/v1",
-};
-
-function greet(name) {
-  const message = \`Hello, \${name}! Welcome to \${AppConfig.appName} v\${AppConfig.version}.\`;
-  console.log(\`[Bundle] \${message}\`);
-  return message;
-}
-
-// Simulate some UI interactions or logic that might be in a real app
-function setupUI() {
-  console.log("[Bundle] Setting up UI components...");
-  // In a real app, this would interact with the DOM or native views
-  // For this simulation, we just log.
-  if (typeof document !== 'undefined' && document.body) {
-    const notice = document.createElement('div');
-    notice.textContent = 'JavaScript Bundle Partially Executed (Simulated)';
-    notice.style.cssText = 'background-color: yellow; color: black; padding: 5px; text-align: center; font-size: 0.8em;';
-    // document.body.insertAdjacentElement('afterbegin', notice);
-    // Note: Injecting DOM elements from a general bundle like this might not always reflect React Native's behavior, 
-    // especially if this bundle is meant for native platforms. For web client, it's more plausible.
-  }
-}
-
-// Simulate app startup
-function main() {
-  console.log("[Bundle] Main function started.");
-  greet("Developer");
-  setupUI();
-  console.log("[Bundle] Application startup complete.");
-}
-
-// Execute main function
-main();
-
-// Expose some pseudo-module (not real ES modules in this simple string)
-var MyApp = {
-  config: AppConfig,
-  greet: greet,
-  run: main
-};
-// Attempt to make it available globally for extremely simple interaction if loaded directly in basic HTML
-if (typeof window !== 'undefined') {
-  window.SimulatedAppBundle = MyApp;
-}
-
-})();
-`;
-        return { mockClientHTML, mockJSBundle };
+        return resolvedSegments.join('/');
+    }
+    
+    // Helper to find a file in the project structure and determine its canonical path (for module ID generation)
+    // Tries common extensions.
+    async function findCanonicalPath(importPath, currentFilePath, allProjectFiles) {
+        const resolvedBase = resolveProjectPath(importPath, currentFilePath);
+        const extensionsToTry = ['.ts', '.tsx', '.js', '.json']; // Order matters
+        for (const ext of extensionsToTry) {
+            if (allProjectFiles.has(resolvedBase + ext)) return resolvedBase + ext;
+        }
+        if (allProjectFiles.has(resolvedBase)) return resolvedBase; // If path already includes extension or is exact
+        
+        // Try index files for directory imports
+        for (const ext of extensionsToTry) {
+             if (allProjectFiles.has(resolvedBase + '/index' + ext)) return resolvedBase + '/index' + ext;
+        }
+        return null; // Not found
     }
 
 
-    function simulateBuildProcess() {
+    async function actualBuildProcess() {
         if (buildInProgress) return;
-
         buildInProgress = true;
         buildProjectButton.disabled = true;
         buildProjectButton.textContent = 'Building...';
-        
-        buildLogElement.textContent = ''; 
-        currentLogIndex = 0;
-        currentLogsArray = [...baseMockBuildLogs]; // Start with base logs
+        buildLogElement.textContent = '';
+        logToBuildOutput("Build process started...");
 
-        // Simulate cleaning build folder from structure
         currentProjectStructure = currentProjectStructure.filter(item => item.name !== 'build');
+        fileTreeElement.innerHTML = ''; // Clear old tree before re-rendering later
+        renderFileTree(fileTreeElement, currentProjectStructure); // Render tree without build folder first
+
+        const sourceFiles = [];
+        const allProjectFilePaths = new Set();
+
+        function collectSourceFiles(structure) {
+            for (const item of structure) {
+                if (item.type === 'file' && (item.name.endsWith('.ts') || item.name.endsWith('.tsx') || item.name.endsWith('.js'))) {
+                    sourceFiles.push(item);
+                    allProjectFilePaths.add(item.path);
+                }
+                if (item.children) {
+                    collectSourceFiles(item.children);
+                }
+            }
+        }
+        collectSourceFiles(currentProjectStructure);
+        logToBuildOutput(`Found ${sourceFiles.length} source files to process.`);
+
+        const transpiledFiles = [];
+        const importMapEntries = {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom": "https://esm.sh/react-dom@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "react-native": "https://esm.sh/react-native-web@0.19.9",
+                "react-native-web": "https://esm.sh/react-native-web@0.19.9",
+                "@expo/vector-icons": "./mock_expo_vector_icons.js",
+                "lucide-react-native": "./mock_lucide_react_native.js",
+                "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
+                "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
+                "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4"
+            }
+        };
         
-        // Generate mock file content
-        const { mockClientHTML, mockJSBundle } = generateMockFileContent();
+        const babelOptions = {
+            presets: ['react', 'typescript'], // env preset adds too much for simple es module output
+            filename: '', // will be set per file
+            sourceType: 'module',
+        };
 
-        // Add specific artifact generation logs
-        currentLogsArray.push(...artifactGenerationLogs);
+        for (const file of sourceFiles) {
+            logToBuildOutput(`Processing ${file.path}...`);
+            try {
+                const originalCode = file.content || await fetchFileContent(file.path);
+                babelOptions.filename = file.path;
+                
+                let { code: transpiledCode } = Babel.transform(originalCode, babelOptions);
 
-        // Create build folder structure
+                // Rewrite react-native to react-native-web (Babel plugin would be better but this is simpler for now)
+                transpiledCode = transpiledCode.replace(/from\s+['"]react-native['"]/g, 'from "react-native-web"');
+                
+                // Rewrite relative imports to use module IDs (which will be mapped in importmap)
+                const importRegex = /(import\s+.*?from\s+['"])([^'"]+)(['"])/g;
+                let match;
+                let tempCode = transpiledCode;
+                const replacements = [];
+
+                while((match = importRegex.exec(tempCode)) !== null) {
+                    const importPath = match[2];
+                    if (importPath.startsWith('./') || importPath.startsWith('../')) {
+                        const canonicalPath = await findCanonicalPath(importPath, file.path, allProjectFilePaths);
+                        if (canonicalPath) {
+                            const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
+                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`});
+                        } else {
+                            logToBuildOutput(`Could not resolve import '${importPath}' in ${file.path}`, "WARN");
+                        }
+                    }
+                }
+                // Apply replacements from end to start to not mess up indices
+                for(let i = replacements.length - 1; i >= 0; i--) {
+                    const r = replacements[i];
+                    transpiledCode = transpiledCode.substring(0, r.startIndex) + r.newImport + transpiledCode.substring(r.endIndex);
+                }
+
+
+                const flatName = file.path.replace(/\//g, '_').replace(/\.(ts|tsx|js)$/, '.js');
+                const moduleId = `project_/${file.path.replace(/\.(ts|tsx|js)$/, '')}`;
+                
+                transpiledFiles.push({
+                    name: flatName,
+                    path: `build/web-client/${flatName}`,
+                    content: transpiledCode,
+                    type: 'file'
+                });
+                importMapEntries.imports[moduleId] = `./${flatName}`;
+            } catch (error) {
+                logToBuildOutput(`Error processing ${file.path}: ${error.message}`, "ERROR");
+                console.error(`Error processing ${file.path}:`, error);
+            }
+        }
+
+        // Add mock files
+        const mockExpoIconsContent = `
+export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO');
+export const Ionicons = MaterialCommunityIcons; // common alias
+// Add other icon sets if needed by the app
+        `;
+        transpiledFiles.push({ name: 'mock_expo_vector_icons.js', path: 'build/web-client/mock_expo_vector_icons.js', content: mockExpoIconsContent, type: 'file' });
+
+        const mockLucideIconsContent = `
+const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, name.substring(0,3));
+export const Home = createIcon('Home');
+export const Users = createIcon('Users');
+export const MessageCircle = createIcon('MessageCircle');
+// Add other icons if needed by the app
+        `;
+        transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' });
+
+
+        const entryPointOriginalPath = 'index.js'; // Expo's typical entry point
+        const entryPointModuleId = `project_/${entryPointOriginalPath.replace(/\.js$/, '')}`;
+
+        const clientIndexHtmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Built React Native Web App</title>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+        #root { display: flex; flex-direction: column; height: 100%; }
+        /* Basic RNW style normalization */
+        div[style*="flex-direction:row"] { box-sizing: border-box; }
+        div[style*="flex-direction:column"] { box-sizing: border-box; }
+    </style>
+    <script type="importmap">
+${JSON.stringify(importMapEntries, null, 2)}
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        // Ensure React and ReactDOM are globally available for some RNW internals if not fully ESM compatible
+        import React from 'react';
+        import ReactDOM from 'react-dom/client';
+        window.React = React;
+        // window.ReactDOM = ReactDOM; // ReactDOM/client doesn't expose traditional global
+
+        // The main entry point for the app
+        import '${entryPointModuleId}';
+    </script>
+</body>
+</html>`;
+
         const buildFolder = {
             name: 'build',
             type: 'folder',
             children: [
                 {
-                    name: 'output',
+                    name: 'web-client',
                     type: 'folder',
                     children: [
-                        {
-                            name: 'web-client',
-                            type: 'folder',
-                            children: [
-                                { name: 'index.html', type: 'file', path: 'build/output/web-client/index.html', content: mockClientHTML, isClientIndex: true },
-                                { name: 'app.js', type: 'file', path: 'build/output/web-client/app.js', content: mockJSBundle }
-                            ]
-                        },
-                        {
-                            name: 'android',
-                            type: 'folder',
-                            children: [
-                                { name: 'main.jsbundle', type: 'file', path: 'build/output/android/main.jsbundle', content: mockJSBundle }
-                            ]
-                        },
-                        {
-                            name: 'ios',
-                            type: 'folder',
-                            children: [
-                                { name: 'main.jsbundle', type: 'file', path: 'build/output/ios/main.jsbundle', content: mockJSBundle }
-                            ]
-                        },
-                        { // Placeholder for non-browsable compiled outputs
-                            name: 'apk', type: 'folder', children: [
-                                { name: 'debug', type: 'folder', children: [
-                                     { name: 'app-debug.apk', type: 'file', path: 'build/output/apk/debug/app-debug.apk', content: "// Simulated APK binary data...\nThis is not a real APK file.", isBinary: true }
-                                ]}
-                            ]
-                        },
-                         {
-                            name: 'app', type: 'folder', children: [
-                                { name: 'debug', type: 'folder', children: [
-                                     { name: 'MyApp.app', type: 'file', path: 'build/output/app/debug/MyApp.app', content: "// Simulated iOS App bundle data...\nThis is not a real .app bundle.", isBinary: true }
-                                ]}
-                            ]
-                        }
+                        { name: 'index.html', path: 'build/web-client/index.html', content: clientIndexHtmlContent, type: 'file', isClientIndex: true },
+                        ...transpiledFiles
                     ]
                 }
             ]
         };
         currentProjectStructure.push(buildFolder);
+        
+        // fileContentCache needs to be updated for build artifacts so they can be viewed
+        fileContentCache.set('build/web-client/index.html', clientIndexHtmlContent);
+        transpiledFiles.forEach(f => fileContentCache.set(f.path, f.content));
 
-        // Re-render file tree after a short delay to allow some logs to appear first
-        setTimeout(() => {
-            fileTreeElement.innerHTML = ''; // Clear old tree
-            renderFileTree(fileTreeElement, currentProjectStructure);
-        }, 500 * (baseMockBuildLogs.length / 2)); // Delay based on number of initial logs
 
-        appendLogEntry();
+        logToBuildOutput("Updating file tree with build artifacts...");
+        fileTreeElement.innerHTML = ''; // Clear old tree
+        renderFileTree(fileTreeElement, currentProjectStructure);
+        
+        logToBuildOutput("Build process finished successfully.", "SUCCESS");
+        logToBuildOutput("You can now browse the 'build/web-client' folder and view 'index.html'.");
+
+        buildInProgress = false;
+        buildProjectButton.disabled = false;
+        buildProjectButton.textContent = 'Build Project';
     }
 
+
+    // Remove simulation logic
+    // let currentLogIndex = 0; // No longer needed for simulation
+    // let currentLogsArray = []; // No longer needed for simulation
+
+    // function appendLogEntry() { ... } // No longer needed for simulation
+    // function generateMockFileContent() { ... } // No longer needed for simulation
+
     if (buildProjectButton) {
-        buildProjectButton.addEventListener('click', simulateBuildProcess);
+        buildProjectButton.addEventListener('click', actualBuildProcess);
     } else {
         console.error("Build project button not found.");
     }
     
     if (buildLogElement) {
-         buildLogElement.textContent = 'Click "Build Project" to start a simulated build.\n';
+         buildLogElement.textContent = 'Click "Build Project" to start the actual web client build.\n';
     }
 
-    // Load a default file if any (e.g. README or first file)
-    // For now, let user click. If you want a default, find App.tsx or similar and call loadFileContent.
-    // const readmeFile = currentProjectStructure.find(f => f.name.toLowerCase() === 'app.tsx');
-    // if (readmeFile) {
-    //    loadFileContent(readmeFile);
-    //    const firstLi = fileTreeElement.querySelector('.file-name.tsx');
-    //    if(firstLi && firstLi.parentElement) {
-    //        firstLi.parentElement.classList.add('selected');
-    //        currentSelectedElement = firstLi.parentElement;
-    //    }
-    // }
+    // Auto-select App.tsx or index.js initially if desired
+    const defaultFileToShow = currentProjectStructure.find(f => f.path === 'index.js') || currentProjectStructure.find(f => f.path === 'App.tsx');
+    if (defaultFileToShow) {
+       loadFileContent(defaultFileToShow).then(() => {
+           const items = fileTreeElement.querySelectorAll('.file-name');
+           for (let item of items) {
+               if (item.textContent.includes(defaultFileToShow.name)) {
+                   if (item.parentElement) {
+                       item.parentElement.classList.add('selected');
+                       currentSelectedElement = item.parentElement;
+                   }
+                   break;
+               }
+           }
+       });
+    }
 });
