@@ -577,6 +577,7 @@ export const Linking = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Built React Native Web App</title>
+    <base href="./">
     <style>
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
         #root { display: flex; flex-direction: column; height: 100%; }
