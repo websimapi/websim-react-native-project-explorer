@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const iframeClientViewer = document.getElementById('iframe-client-viewer');
     const exportedMembersElement = document.getElementById('exported-members');
     let currentSelectedElement = null;
+    let buildInProgress = false; // Declare buildInProgress here
 
     const buildProjectButton = document.getElementById('build-project-button');
     const buildOutputContainer = document.getElementById('build-output-container');
