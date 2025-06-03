@@ -6,19 +6,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const iframeClientViewer = document.getElementById('iframe-client-viewer');
     const exportedMembersElement = document.getElementById('exported-members');
     let currentSelectedElement = null;
-    let buildInProgress = false; 
+    let buildInProgress = false;
 
     const buildProjectButton = document.getElementById('build-project-button');
     const buildOutputContainer = document.getElementById('build-output-container');
     const buildLogElement = document.getElementById('build-log');
 
-    // Define known missing files that are part of the core structure
-    const placeholderFileContent = (fileName) => `// Placeholder for ${fileName}\n// Content not provided in initial setup.\nexport default function ${fileName.replace('.tsx', '')}() { console.warn("${fileName} is a placeholder."); return null; };`;
+    const placeholderFileContent = (fileName, componentName) => `// Placeholder for ${fileName}
+import React from 'react';
+import { View, Text } from 'react-native-web'; // Using react-native-web for browser compatibility
+
+export default function ${componentName}(props) {
+  console.warn("${fileName} is a placeholder component. Props:", Object.keys(props));
+  // Basic rendering for stack/tab navigators to show children if any
+  if (props.children && (componentName.includes('Stack') || componentName.includes('Layout'))) {
+    return React.createElement(View, { style: { flex: 1, borderWidth: 1, borderColor: 'gray', padding: 5 } }, 
+      React.createElement(Text, null, componentName + " Placeholder"),
+      props.children
+    );
+  }
+  // Attempt to simulate onLogin/onLogout for AuthStack/MainStack
+  if (componentName === 'AuthStack' && typeof props.onLogin === 'function') {
+    return React.createElement(View, {style: {flex:1, alignItems:'center', justifyContent:'center'}}, 
+      React.createElement(Text, null, "AuthStack Placeholder"), 
+      React.createElement('button', {onClick: props.onLogin}, "Simulate Login")
+    );
+  }
+  if (componentName === 'MainStack' && typeof props.onLogout === 'function') {
+     return React.createElement(View, {style: {flex:1, borderWidth:1, borderColor:'blue'}}, 
+      React.createElement(Text, null, "MainStack Placeholder (contains Tab Navigator)"),
+      React.createElement('button', {onClick: props.onLogout, style:{position:'absolute', top:10, right:10}}, "Simulate Logout"),
+      props.children // MainStack in App.tsx renders TabNavigator as children via component prop
+    );
+  }
+
+  return React.createElement(View, {style: {padding:10, margin:5, borderWidth:1, borderColor:'lightgray'}}, 
+    React.createElement(Text, null, componentName + " Placeholder")
+  );
+};`;
+
 
     const initialProjectStructure = [
         { name: 'App.tsx', path: 'App.tsx', type: 'file' },
         { name: 'global.d.ts', path: 'global.d.ts', type: 'file' },
-        { name: 'index.js', path: 'index.js', type: 'file' }, 
+        { name: 'index.js', path: 'index.js', type: 'file' },
         {
             name: 'app', type: 'folder', children: [
                 { name: '_layout.tsx', path: 'app/_layout.tsx', type: 'file' },
@@ -43,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     name: 'components', type: 'folder', children: [
                         {
                             name: 'Feed', type: 'folder', children: [
-                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx'), isPlaceholder: true },
+                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx', 'CreatePost'), isPlaceholder: true },
                                 { name: 'FeedHeader.tsx', path: 'src/components/Feed/FeedHeader.tsx', type: 'file' },
                                 { name: 'FeedScreen.tsx', path: 'src/components/Feed/FeedScreen.tsx', type: 'file' },
                                 { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file' },
@@ -56,8 +87,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 {
                     name: 'navigation', type: 'folder', children: [
-                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx'), isPlaceholder: true },
-                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx'), isPlaceholder: true },
+                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx', 'AuthStack'), isPlaceholder: true },
+                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx', 'MainStack'), isPlaceholder: true },
                     ]
                 },
                 {
@@ -72,12 +103,23 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentProjectStructure = JSON.parse(JSON.stringify(initialProjectStructure));
     const fileContentCache = new Map();
 
+    function initializeCacheWithPlaceholders(structure) {
+        for (const item of structure) {
+            if (item.isPlaceholder && item.content) {
+                fileContentCache.set(item.path, item.content);
+            }
+            if (item.children) {
+                initializeCacheWithPlaceholders(item.children);
+            }
+        }
+    }
+    initializeCacheWithPlaceholders(currentProjectStructure);
 
     function renderFileTree(parentElement, structure) {
         structure.forEach(item => {
             const li = document.createElement('li');
             li.classList.add('tree-item');
-            if (item.isPlaceholder || item.missing) { 
+            if (item.isPlaceholder || item.missing) {
                 li.style.opacity = "0.6";
                 li.title = item.isPlaceholder ? "File content is a placeholder" : "File content not provided";
             }
@@ -99,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 li.appendChild(subUl);
                 span.addEventListener('click', (e) => {
-                    e.stopPropagation(); 
+                    e.stopPropagation();
                     subUl.style.display = subUl.style.display === 'none' ? 'block' : 'none';
                 });
 
@@ -124,32 +166,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function fetchFileContent(filePath) {
         if (fileContentCache.has(filePath)) {
-            return fileContentCache.get(filePath));
+            return fileContentCache.get(filePath);
         }
-        // Check if content is already in item (e.g., for placeholders or build artifacts)
-        function findItem(structure, path) {
-            for (const item of structure) {
-                if (item.path === path) return item;
-                if (item.children) {
-                    const found = findItem(item.children, path);
-                    if (found) return found;
-                }
-            }
-            return null;
-        }
-        const item = findItem(currentProjectStructure, filePath);
-        if (item && item.content) {
-            fileContentCache.set(filePath, item.content);
-            return item.content;
-        }
-
         try {
-            const response = await fetch(filePath));
+            const response = await fetch(filePath);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
             }
             const code = await response.text();
-            fileContentCache.set(filePath, code));
+            fileContentCache.set(filePath, code);
             return code;
         } catch (error) {
             console.error(`Failed to fetch ${filePath}:`, error);
@@ -170,18 +195,11 @@ document.addEventListener('DOMContentLoaded', () => {
             iframeClientViewer.style.display = 'none';
             codeDisplayContainer.style.display = 'none';
 
-            let codeToDisplay;
-            if (item.content) { 
-                codeToDisplay = item.content;
-            } else { 
-                codeToDisplay = await fetchFileContent(filePath));
-            }
+            let codeToDisplay = await fetchFileContent(filePath); // Uses cache or fetches
             
             if (item.isClientIndex) { 
                 selectedFileNameElement.textContent = `${fileName} (Live Preview from Build)`;
-                // Create enhanced HTML with all built files embedded
-                const enhancedHtml = createCompleteAppContent(codeToDisplay));
-                iframeClientViewer.srcdoc = enhancedHtml);
+                iframeClientViewer.srcdoc = codeToDisplay;
                 iframeClientViewer.style.display = 'block';
                 exportedMembersElement.innerHTML = '<em>Displaying built client application.</em>';
             } else {
@@ -197,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (extension === 'json') language = 'json';
                 
                 codeDisplayElement.className = `language-${language}`;
-                Prism.highlightElement(codeDisplayElement));
+                Prism.highlightElement(codeDisplayElement);
                 if (!item.isBinary && !item.isClientIndex) { 
                    extractExportedMembers(codeToDisplay, extension);
                 } else if (item.isBinary) {
@@ -221,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let html = '';
-        const defaultExportRegex = /export default function (\w+)|export default class (\w+)|export default (\w+)/g;
+        const defaultExportRegex = /export default function (\w+)|export default class (\w+)|export default (?:const\s)?(\w+)/g;
         const namedFunctionExportRegex = /export function (\w+)/g;
         const namedConstExportRegex = /export const (\w+)/g;
         const namedInterfaceExportRegex = /export interface (\w+)/g;
@@ -254,47 +272,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderFileTree(fileTreeElement, currentProjectStructure);
 
-    // --- Actual Build Logic ---
-
     function logToBuildOutput(message, type = "INFO") {
         const timestamp = new Date().toLocaleTimeString();
         buildLogElement.textContent += `[${timestamp}] [${type}] ${message}\n`;
         buildLogElement.scrollTop = buildLogElement.scrollHeight;
     }
-
-    // Helper function to resolve relative paths to project-absolute paths
-    // Returns path without extension initially, caller should handle extension variants
+    
     function resolveProjectPath(relativePath, currentFilePath) {
-        const currentDirSegments = currentFilePath.split('/').slice(0, -1));
+        const currentDirSegments = currentFilePath.split('/').slice(0, -1);
         const pathSegments = relativePath.split('/');
-        const resolvedSegments = [...currentDirSegments]);
+        const resolvedSegments = [...currentDirSegments];
 
         for (const segment of pathSegments) {
             if (segment === '.') continue;
             if (segment === '..') {
-                if (resolvedSegments.length > 0) resolvedSegments.pop());
+                if (resolvedSegments.length > 0) resolvedSegments.pop();
             } else {
-                resolvedSegments.push(segment));
+                resolvedSegments.push(segment);
             }
         }
         return resolvedSegments.join('/');
     }
     
-    // Helper to find a file in the project structure and determine its canonical path (for module ID generation)
-    // Tries common extensions.
-    async function findCanonicalPath(importPath, currentFilePath, allProjectFiles) {
-        const resolvedBase = resolveProjectPath(importPath, currentFilePath));
-        const extensionsToTry = ['.ts', '.tsx', '.js', '.json']; 
-        for (const ext of extensionsToTry) {
-            if (allProjectFiles.has(resolvedBase + ext)) return resolvedBase + ext);
-        }
-        if (allProjectFiles.has(resolvedBase)) return resolvedBase; 
+    async function findCanonicalPath(importPath, currentFilePath, allProjectFilePathsSet) {
+        const resolvedBase = resolveProjectPath(importPath, currentFilePath);
+        const extensionsToTry = ['.js', '.ts', '.tsx', '.json']; // Order matters for JS vs TS preference if both exist (unlikely for same base)
         
-        // Try index files for directory imports
         for (const ext of extensionsToTry) {
-             if (allProjectFiles.has(resolvedBase + '/index' + ext)) return resolvedBase + '/index' + ext);
+            if (allProjectFilePathsSet.has(resolvedBase + ext)) return resolvedBase + ext;
         }
-        return null; 
+        
+        if (allProjectFilePathsSet.has(resolvedBase)) return resolvedBase;
+
+        for (const ext of extensionsToTry) {
+             if (allProjectFilePathsSet.has(resolvedBase + '/index' + ext)) return resolvedBase + '/index' + ext;
+        }
+        logToBuildOutput(`Could not resolve import '${importPath}' from '${currentFilePath}' to a canonical path. Tried base: '${resolvedBase}'`, "DEBUG");
+        return null;
     }
 
 
@@ -306,26 +320,28 @@ document.addEventListener('DOMContentLoaded', () => {
         buildLogElement.textContent = '';
         logToBuildOutput("Build process started...");
 
-        currentProjectStructure = currentProjectStructure.filter(item => item.name !== 'build'));
+        currentProjectStructure = currentProjectStructure.filter(item => item.name !== 'build');
         fileTreeElement.innerHTML = ''; 
-        renderFileTree(fileTreeElement, currentProjectStructure)); 
+        renderFileTree(fileTreeElement, currentProjectStructure); 
 
         const sourceFiles = [];
-        const allProjectFilePaths = new Set());
+        const allProjectFilePathsSet = new Set();
 
-        function collectSourceFiles(structure) {
+        function collectSourceFiles(structure, currentPath = '') {
             for (const item of structure) {
-                if (item.type === 'file' && (item.name.endsWith('.ts') || item.name.endsWith('.tsx') || item.name.endsWith('.js')) {
-                    sourceFiles.push(item));
-                    allProjectFilePaths.add(item.path));
+                const itemPath = item.path; 
+                allProjectFilePathsSet.add(itemPath); 
+                if (item.type === 'file' && (itemPath.endsWith('.ts') || itemPath.endsWith('.tsx') || itemPath.endsWith('.js')) && !itemPath.endsWith('.d.ts')) {
+                    sourceFiles.push(item);
                 }
                 if (item.children) {
-                    collectSourceFiles(item.children));
+                    collectSourceFiles(item.children, itemPath);
                 }
             }
         }
-        collectSourceFiles(currentProjectStructure));
-        logToBuildOutput(`Found ${sourceFiles.length} source files to process.`));
+        collectSourceFiles(currentProjectStructure);
+        logToBuildOutput(`Found ${sourceFiles.length} source files to process.`);
+        logToBuildOutput(`Known project files for resolution: ${Array.from(allProjectFilePathsSet).join(', ')}`, "DEBUG");
 
         const transpiledFiles = [];
         const importMapEntries = {
@@ -340,12 +356,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
                 "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
                 "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4",
-                "expo-router": "./mock_expo_router.js" 
+                "expo-router": "./mock_expo_router.js",
+                "expo": "./mock_expo_core.js"
             }
         };
-        
+
         const babelOptions = {
-            presets: ['react', 'typescript'], 
+            presets: ['react', 'typescript'],
             filename: '', 
             sourceType: 'module',
         };
@@ -353,41 +370,47 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const file of sourceFiles) {
             logToBuildOutput(`Processing ${file.path}...`);
             try {
-                const originalCode = file.content || await fetchFileContent(file.path));
+                const originalCode = await fetchFileContent(file.path);
+                babelOptions.filename = file.path; 
                 
-                babelOptions.filename = file.path);
-                
-                let { code: transpiledCode } = Babel.transform(originalCode, babelOptions));
+                let { code: transpiledCode } = Babel.transform(originalCode, babelOptions);
 
-                // Rewrite react-native to react-native-web (Babel plugin would be better but this is simpler for now)
                 transpiledCode = transpiledCode.replace(/from\s+['"]react-native['"]/g, 'from "react-native-web"');
                 
-                // Rewrite relative imports to use module IDs (which will be mapped in importmap)
-                const importRegex = /(import\s+.*?from\s+['"])([^'"]+)(['"])/g;
+                const importRegex = /(import\s+(?:{[^}]+}\s*from\s+|[^;]+\s*from\s+|\s*)['"])([^'"]+)(['"])/g;
                 let match;
                 let tempCode = transpiledCode;
                 const replacements = [];
 
                 while((match = importRegex.exec(tempCode)) !== null) {
                     const importPath = match[2];
-                    if (importPath.startsWith('./') || importPath.startsWith('../'))) {
-                        const canonicalPath = await findCanonicalPath(importPath, file.path, allProjectFilePaths));
+                    if (importPath.startsWith('./') || importPath.startsWith('../')) {
+                        const canonicalPath = await findCanonicalPath(importPath, file.path, allProjectFilePathsSet);
                         if (canonicalPath) {
                             const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
-                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`));
+                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`});
+                            logToBuildOutput(`Rewrote '${importPath}' to '${moduleId}' in ${file.path}`, "DEBUG");
                         } else {
-                            logToBuildOutput(`Could not resolve import '${importPath}' in ${file.path}`, "WARN"));
+                            logToBuildOutput(`Could not resolve relative import '${importPath}' in ${file.path}`, "WARN");
                         }
+                    } else if (importPath.startsWith('@/') || importPath.startsWith('src/') || importPath.startsWith('app/') || importPath.startsWith('hooks/')) { 
+                         const canonicalPath = await findCanonicalPath(importPath, '', allProjectFilePathsSet); 
+                         if (canonicalPath) {
+                            const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
+                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`});
+                            logToBuildOutput(`Rewrote '${importPath}' to '${moduleId}' in ${file.path}`, "DEBUG");
+                         } else {
+                            logToBuildOutput(`Could not resolve project-absolute import '${importPath}' in ${file.path}`, "WARN");
+                         }
                     }
                 }
-                // Apply replacements from end to start to not mess up indices
+
                 for(let i = replacements.length - 1; i >= 0; i--) {
-                    const r = replacements[i]);
-                    transpiledCode = transpiledCode.substring(0, r.startIndex)) + r.newImport + transpiledCode.substring(r.endIndex));
+                    const r = replacements[i];
+                    transpiledCode = transpiledCode.substring(0, r.startIndex) + r.newImport + transpiledCode.substring(r.endIndex);
                 }
 
-
-                const flatName = file.path.replace(/\//g, '_').replace(/\.(ts|tsx|js)$/, '.js'));
+                const flatName = file.path.replace(/\//g, '_').replace(/\.(ts|tsx|js)$/, '.js');
                 const moduleId = `project_/${file.path.replace(/\.(ts|tsx|js)$/, '')}`;
                 
                 transpiledFiles.push({
@@ -398,72 +421,99 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 importMapEntries.imports[moduleId] = `./${flatName}`;
             } catch (error) {
-                logToBuildOutput(`Error processing ${file.path}: ${error.message}`, "ERROR"));
-                console.error(`Error processing ${file.path}:`, error));
+                logToBuildOutput(`Error processing ${file.path}: ${error.message} \n ${error.stack}`, "ERROR");
+                console.error(`Error processing ${file.path}:`, error);
             }
         }
 
-        // Add mock files
         const mockExpoIconsContent = `
-export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO'));
-export const Ionicons = MaterialCommunityIcons; 
-// Add other icon sets if needed by the app
+export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO');
+export const Ionicons = MaterialCommunityIcons;
         `;
-        transpiledFiles.push({ name: 'mock_expo_vector_icons.js', path: 'build/web-client/mock_expo_vector_icons.js', content: mockExpoIconsContent, type: 'file' }));
+        transpiledFiles.push({ name: 'mock_expo_vector_icons.js', path: 'build/web-client/mock_expo_vector_icons.js', content: mockExpoIconsContent, type: 'file' });
 
         const mockLucideIconsContent = `
-const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, name.substring(0,3)));
-export const Home = createIcon('Home'));
-export const Users = createIcon('Users'));
-export const MessageCircle = createIcon('MessageCircle'));
-// Add other icons if needed by the app
+import React from 'react';
+const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, name.substring(0,3));
+export const Home = createIcon('Home');
+export const Users = createIcon('Users');
+export const MessageCircle = createIcon('MessageCircle');
         `;
-        transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' }));
+        transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' });
 
-        // Add mock for expo-router
         const mockExpoRouterContent = `
-import React from 'react'));
+import React from 'react';
 
 const createMockComponent = (displayName) => {
   const Comp = (props) => {
-    // console.log(\`Mock <\${displayName}> rendered with props:\`, props));
-    return React.createElement(React.Fragment, null, props.children));
+    // console.log(\`Mock <\${displayName}> rendered with props:\`, props, "Children:", props.children);
+    const style = props.screenOptions && props.screenOptions.headerShown === false ? {display: 'none'} : {};
+    if (displayName === 'ExpoRouter.Stack' || displayName === 'ExpoRouter.Tabs') {
+         // Pass navigator specific props like screenOptions down if children are Screens
+        let childrenToRender = props.children;
+        if (React.Children.count(props.children) > 0) {
+            childrenToRender = React.Children.map(props.children, child => {
+                if (React.isValidElement(child) && (child.type.displayName === 'ExpoRouter.Stack.Screen' || child.type.displayName === 'ExpoRouter.Tabs.Screen')) {
+                    return React.cloneElement(child, { ...props.screenOptions, ...child.props.options });
+                }
+                return child;
+            });
+        }
+        return React.createElement('div', { 'data-name': displayName, style }, childrenToRender);
+    }
+     if (displayName === 'ExpoRouter.Stack.Screen' || displayName === 'ExpoRouter.Tabs.Screen') {
+        // Screens might not render directly, their component prop is used by navigator
+        // For simplicity, if a component is passed, try to render it.
+        if (props.component) return React.createElement(props.component);
+        if (props.children) return React.createElement(React.Fragment, null, props.children);
+        return React.createElement('div', {'data-name': displayName + " (empty)"});
+     }
+    return React.createElement(React.Fragment, null, props.children);
   };
   Comp.displayName = displayName;
   return Comp;
 };
 
-export const Stack = createMockComponent('ExpoRouter.Stack'));
-Stack.Screen = createMockComponent('ExpoRouter.Stack.Screen'));
+export const Stack = createMockComponent('ExpoRouter.Stack');
+Stack.Screen = createMockComponent('ExpoRouter.Stack.Screen');
 
-export const Tabs = createMockComponent('ExpoRouter.Tabs'));
-Tabs.Screen = createMockComponent('ExpoRouter.Tabs.Screen'));
+export const Tabs = createMockComponent('ExpoRouter.Tabs');
+Tabs.Screen = createMockComponent('ExpoRouter.Tabs.Screen');
+
 
 export const SplashScreen = {
-    preventAutoHideAsync: () => { console.log('Mock SplashScreen.preventAutoHideAsync()')); return Promise.resolve(true)); },
-    hideAsync: () => { console.log('Mock SplashScreen.hideAsync()')); return Promise.resolve(true)); }
+    preventAutoHideAsync: () => { console.log('Mock SplashScreen.preventAutoHideAsync()'); return Promise.resolve(true); },
+    hideAsync: () => { console.log('Mock SplashScreen.hideAsync()'); return Promise.resolve(true); }
+};
+
+export const Link = (props) => {
+    const { href, children, ...rest } = props;
+    return React.createElement('a', { ...rest, href: href || '#', onClick: (e) => { e.preventDefault(); console.log('Mock Link to', href); alert('Mock link navigation to: ' + href); } }, children);
 };
 
 export function useRouter() {
   return {
-    push: (path) => console.log(\`Mock useRouter.push to: \${path}\`)),
-    replace: (path) => console.log(\`Mock useRouter.replace with: \${path}\`)),
-    back: () => console.log('Mock useRouter.back()')),
-    // Add other methods if they appear in errors during runtime
+    push: (path) => console.log(\`Mock useRouter.push to: \${path}\`),
+    replace: (path) => console.log(\`Mock useRouter.replace with: \${path}\`),
+    back: () => console.log('Mock useRouter.back()'),
   };
 }
+export default Stack; 
 
-// Default export might be expected by some parts of expo-router (e.g. entry point)
-// but components are typically named exports.
-export default {
-  Stack,
-  Tabs,
-  SplashScreen,
-  Link,
-  useRouter
-};
 `;
-        transpiledFiles.push({ name: 'mock_expo_router.js', path: 'build/web-client/mock_expo_router.js', content: mockExpoRouterContent, type: 'file' }));
+        transpiledFiles.push({ name: 'mock_expo_router.js', path: 'build/web-client/mock_expo_router.js', content: mockExpoRouterContent, type: 'file'});
+
+        const mockExpoCoreContent = `
+// Mock for 'expo' package
+import { AppRegistry } from 'react-native-web'; // Use react-native-web's AppRegistry
+
+export function registerRootComponent(component) {
+  AppRegistry.registerComponent('main', () => component);
+  AppRegistry.runApplication('main', { rootTag: document.getElementById('root') });
+}
+`;
+        transpiledFiles.push({ name: 'mock_expo_core.js', path: 'build/web-client/mock_expo_core.js', content: mockExpoCoreContent, type: 'file' });
+
 
         const entryPointOriginalPath = 'index.js'; 
         const entryPointModuleId = `project_/${entryPointOriginalPath.replace(/\.js$/, '')}`;
@@ -476,26 +526,22 @@ export default {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Built React Native Web App</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; background-color: #f0f2f5;}
         #root { display: flex; flex-direction: column; height: 100%; }
-        /* Basic RNW style normalization */
         div[style*="flex-direction:row"] { box-sizing: border-box; }
         div[style*="flex-direction:column"] { box-sizing: border-box; }
     </style>
     <script type="importmap">
-${JSON.stringify(importMapEntries, null, 2))}
+${JSON.stringify(importMapEntries, null, 2)}
     </script>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root" style="height: 100vh;"></div>
     <script type="module">
-        // Ensure React and ReactDOM are globally available for some RNW internals if not fully ESM compatible
-        import React from 'react'));
-        import ReactDOM from 'react-dom/client'));
-        window.React = React;
-        // window.ReactDOM = ReactDOM; // ReactDOM/client doesn't expose traditional global
-
-        // The main entry point for the app
+        import React from 'react';
+        import ReactDOM from 'react-dom/client';
+        window.React = React; 
+        
         import '${entryPointModuleId}';
     </script>
 </body>
@@ -515,119 +561,50 @@ ${JSON.stringify(importMapEntries, null, 2))}
                 }
             ]
         };
-        currentProjectStructure.push(buildFolder));
+        currentProjectStructure.push(buildFolder);
         
-        // fileContentCache needs to be updated for build artifacts so they can be viewed
-        fileContentCache.set('build/web-client/index.html', clientIndexHtmlContent));
-        transpiledFiles.forEach(f => fileContentCache.set(f.path, f.content)));
+        fileContentCache.set('build/web-client/index.html', clientIndexHtmlContent);
+        transpiledFiles.forEach(f => fileContentCache.set(f.path, f.content));
 
-        // Also store mock files in cache
-        fileContentCache.set('build/web-client/mock_expo_vector_icons.js', mockExpoIconsContent));
-        fileContentCache.set('build/web-client/mock_lucide_react_native.js', mockLucideIconsContent));
-        fileContentCache.set('build/web-client/mock_expo_router.js', mockExpoRouterContent));
-
-        logToBuildOutput("Updating file tree with build artifacts..."));
+        logToBuildOutput("Updating file tree with build artifacts...");
         fileTreeElement.innerHTML = ''; 
-        renderFileTree(fileTreeElement, currentProjectStructure));
+        renderFileTree(fileTreeElement, currentProjectStructure);
         
-        logToBuildOutput("Build process finished successfully.", "SUCCESS"));
-        logToBuildOutput("You can now browse the 'build/web-client' folder and view 'index.html'."));
+        logToBuildOutput("Build process finished successfully.", "SUCCESS");
+        logToBuildOutput("You can now browse the 'build/web-client' folder and view 'index.html'.");
 
         buildInProgress = false;
         buildProjectButton.disabled = false;
         buildProjectButton.textContent = 'Build Project';
     }
 
-
-    // Remove simulation logic
-
-
     if (buildProjectButton) {
-        buildProjectButton.addEventListener('click', actualBuildProcess));
+        buildProjectButton.addEventListener('click', actualBuildProcess);
     } else {
-        console.error("Build project button not found."));
+        console.error("Build project button not found.");
     }
-
+    
     if (buildLogElement) {
-         buildLogElement.textContent = 'Click "Build Project" to start the actual web client build.\n';
+         buildLogElement.textContent = 'Click "Build Project" to start the web client build.\n';
     }
 
-    // Auto-select App.tsx or index.js initially if desired
-    const defaultFileToShow = currentProjectStructure.find(f => f.path === 'index.js') || currentProjectStructure.find(f => f.path === 'App.tsx'));
-    if (defaultFileToShow)) {
-       loadFileContent(defaultFileToShow)).then(() => {
-           const items = fileTreeElement.querySelectorAll('.file-name'));
+    const defaultFileToShow = currentProjectStructure.find(f => f.path === 'index.js') || currentProjectStructure.find(f => f.path === 'App.tsx');
+    if (defaultFileToShow) {
+       loadFileContent(defaultFileToShow).then(() => {
+           const items = fileTreeElement.querySelectorAll('.file-name');
            for (let item of items) {
-               if (item.textContent.includes(defaultFileToShow.name)))) {
-                   if (item.parentElement) {
-                       item.parentElement.classList.add('selected'));
-                       currentSelectedElement = item.parentElement;
-                   }
+               const treeItemElement = item.closest('.tree-item');
+               if (treeItemElement && item.textContent.trim() === defaultFileToShow.name) {
+                    if (!treeItemElement.classList.contains('selected')) {
+                        if (currentSelectedElement) {
+                            currentSelectedElement.classList.remove('selected');
+                        }
+                        treeItemElement.classList.add('selected');
+                        currentSelectedElement = treeItemElement;
+                    }
                    break;
                }
            }
-       ));
+       });
     }
-
-    // Helper function to create complete app content with embedded JS files
-    function createCompleteAppContent(indexHtmlContent) {
-        // Get all built files from the current project structure
-        const builtFiles = new Map());
-        
-        function collectBuiltFiles(structure) {
-            for (const item of structure) {
-                if (item.type === 'file' && item.content && item.path && item.path.includes('build/web-client'))) {
-                    const relativePath = item.path.replace('build/web-client/', '');
-                    builtFiles.set(relativePath, item.content));
-                    builtFiles.set(`./${relativePath}`, item.content)); 
-                }
-                if (item.children) {
-                    collectBuiltFiles(item.children));
-                }
-            }
-        }
-        collectBuiltFiles(currentProjectStructure)); // currentProjectStructure is now in scope
-        
-        // Create data URLs for JavaScript files
-        const jsDataUrls = new Map());
-        builtFiles.forEach((content, filename) => {
-            if (filename.endsWith('.js'))) {
-                // Use try-catch for encodeURIComponent as it can fail for some characters (though unlikely for JS code)
-                try {
-                    const dataUrl = `data:application/javascript;charset=utf-8,${encodeURIComponent(content))}`;
-                    jsDataUrls.set(filename, dataUrl));
-                } catch (e) {
-                    console.error(`Error encoding URI component for ${filename}:`, e));
-                    logToBuildOutput(`Error creating data URL for ${filename}: ${e.message}`, "ERROR")));
-                }
-            }
-        }));
-    
-        // Update the import map in the HTML to use data URLs
-        const importMapRegex = /<script type="importmap">([\s\S]*?)<\/script>/;
-        const importMapMatch = indexHtmlContent.match(importMapRegex));
-        
-        if (importMapMatch) {
-            try {
-                const importMapJson = importMapMatch[1]);
-                const importMap = JSON.parse(importMapJson));
-                
-                // Update imports to use data URLs
-                Object.keys(importMap.imports)).forEach(key => {
-                    const value = importMap.imports[key]]);
-                    if (value.startsWith('./'))) { 
-                        importMap.imports[key]] = jsDataUrls.get(value)));
-                });
-                
-                const newImportMapScript = `<script type="importmap">\n${JSON.stringify(importMap, null, 2))}\n    </script>`;
-                indexHtmlContent = indexHtmlContent.replace(importMapRegex, newImportMapScript));
-            } catch (e) {
-                console.error('Error parsing or updating import map:', e));
-                logToBuildOutput(`Error processing import map: ${e.message}`, "ERROR")));
-            }
-        }
-    
-        return indexHtmlContent));
-    }
-
 });
