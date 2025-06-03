@@ -337,7 +337,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 "lucide-react-native": "./mock_lucide_react_native.js",
                 "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
                 "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
-                "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4"
+                "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4",
+                "expo-router": "./mock_expo_router.js" // Added entry for expo-router
             }
         };
         
@@ -415,6 +416,57 @@ export const MessageCircle = createIcon('MessageCircle');
 // Add other icons if needed by the app
         `;
         transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' });
+
+        // Add mock for expo-router
+        const mockExpoRouterContent = `
+import React from 'react';
+
+const createMockComponent = (displayName) => {
+  const Comp = (props) => {
+    // console.log(\`Mock <\${displayName}> rendered with props:\`, props);
+    return React.createElement(React.Fragment, null, props.children);
+  };
+  Comp.displayName = displayName;
+  return Comp;
+};
+
+export const Stack = createMockComponent('ExpoRouter.Stack');
+Stack.Screen = createMockComponent('ExpoRouter.Stack.Screen');
+
+export const Tabs = createMockComponent('ExpoRouter.Tabs');
+Tabs.Screen = createMockComponent('ExpoRouter.Tabs.Screen');
+
+export const SplashScreen = {
+    preventAutoHideAsync: () => { console.log('Mock SplashScreen.preventAutoHideAsync()'); return Promise.resolve(true); },
+    hideAsync: () => { console.log('Mock SplashScreen.hideAsync()'); return Promise.resolve(true); }
+};
+
+export const Link = (props) => {
+    const { href, children, ...rest } = props;
+    // Basic anchor tag mock for web
+    return React.createElement('a', { ...rest, href, onClick: (e) => { e.preventDefault(); console.log('Mock Link to', href); alert('Mock link navigation to: ' + href); } }, children);
+};
+
+export function useRouter() {
+  return {
+    push: (path) => console.log(\`Mock useRouter.push to: \${path}\`),
+    replace: (path) => console.log(\`Mock useRouter.replace with: \${path}\`),
+    back: () => console.log('Mock useRouter.back()'),
+    // Add other methods if they appear in errors during runtime
+  };
+}
+
+// Default export might be expected by some parts of expo-router (e.g. entry point)
+// but components are typically named exports.
+export default {
+  Stack,
+  Tabs,
+  SplashScreen,
+  Link,
+  useRouter
+};
+`;
+        transpiledFiles.push({ name: 'mock_expo_router.js', path: 'build/web-client/mock_expo_router.js', content: mockExpoRouterContent, type: 'file'});
 
 
         const entryPointOriginalPath = 'index.js'; // Expo's typical entry point

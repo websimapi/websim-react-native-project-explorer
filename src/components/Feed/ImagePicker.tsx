@@ -46,5 +46,32 @@ const styles = StyleSheet.create({
     height: 80,
   },
   image: {
-    width
-
+    width: '100%', // Fill the container
+    height: '100%', // Fill the container
+    borderRadius: 4, // Optional: for softer edges
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -8, // Adjust for visibility
+    right: -8, // Adjust for visibility
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12, // Make it circular
+    padding: 2, // Small padding around icon
+  },
+  addButton: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db', // A light gray for the border
+    borderStyle: 'dashed',
+    borderRadius: 4,
+    backgroundColor: '#f9fafb', // A very light gray background
+  },
+  addButtonText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6366f1', // Theme color
+  },
+});
