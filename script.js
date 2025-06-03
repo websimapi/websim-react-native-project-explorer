@@ -179,9 +179,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (item.isClientIndex) { // Special handling for the built client's index.html
                 selectedFileNameElement.textContent = `${fileName} (Live Preview from Build)`;
-                // Create a blob URL for the complete application
-                const appBlob = createCompleteAppBlob(codeToDisplay, currentProjectStructure);
-                iframeClientViewer.src = URL.createObjectURL(appBlob);
+                // Create enhanced HTML with all built files embedded
+                const enhancedHtml = createCompleteAppContent(codeToDisplay);
+                iframeClientViewer.srcdoc = enhancedHtml;
                 iframeClientViewer.style.display = 'block';
                 exportedMembersElement.innerHTML = '<em>Displaying built client application.</em>';
             } else {
@@ -580,38 +580,36 @@ ${JSON.stringify(importMapEntries, null, 2)}
     }
 });
 
-// Helper function to create a complete app blob with all dependencies
-function createCompleteAppBlob(indexHtmlContent, projectStructure) {
+// Helper function to create complete app content with embedded JS files
+function createCompleteAppContent(indexHtmlContent) {
     // Get all built files from the current project structure
     const builtFiles = new Map();
     
-    function collectBuiltFiles(structure, basePath = '') {
+    function collectBuiltFiles(structure) {
         for (const item of structure) {
-            if (item.type === 'file' && item.content && basePath.includes('build/web-client')) {
+            if (item.type === 'file' && item.content && item.path && item.path.includes('build/web-client')) {
                 const relativePath = item.path.replace('build/web-client/', '');
                 builtFiles.set(relativePath, item.content);
+                builtFiles.set(`./${relativePath}`, item.content);
             }
             if (item.children) {
-                collectBuiltFiles(item.children, item.path || basePath);
+                collectBuiltFiles(item.children);
             }
         }
     }
-    collectBuiltFiles(projectStructure);
+    collectBuiltFiles(currentProjectStructure);
     
-    // Create blob URLs for all JavaScript files
-    const blobUrls = new Map();
-    const jsModulePromises = [];
-    
+    // Create data URLs for JavaScript files
+    const jsDataUrls = new Map();
     builtFiles.forEach((content, filename) => {
         if (filename.endsWith('.js')) {
-            const blob = new Blob([content], { type: 'application/javascript' });
-            const url = URL.createObjectURL(blob);
-            blobUrls.set(filename, url);
-            blobUrls.set(`./${filename}`, url);
+            const dataUrl = `data:application/javascript;charset=utf-8,${encodeURIComponent(content)}`;
+            jsDataUrls.set(filename, dataUrl);
+            jsDataUrls.set(`./${filename}`, dataUrl);
         }
     });
 
-    // Update the import map in the HTML to use blob URLs
+    // Update the import map in the HTML to use data URLs
     const importMapRegex = /<script type="importmap">([\s\S]*?)<\/script>/;
     const importMapMatch = indexHtmlContent.match(importMapRegex);
     
@@ -619,11 +617,11 @@ function createCompleteAppBlob(indexHtmlContent, projectStructure) {
         try {
             const importMap = JSON.parse(importMapMatch[1]);
             
-            // Update imports to use blob URLs
+            // Update imports to use data URLs
             Object.keys(importMap.imports).forEach(key => {
                 const value = importMap.imports[key];
-                if (value.startsWith('./') && blobUrls.has(value)) {
-                    importMap.imports[key] = blobUrls.get(value);
+                if (value.startsWith('./') && jsDataUrls.has(value)) {
+                    importMap.imports[key] = jsDataUrls.get(value);
                 }
             });
             
@@ -634,5 +632,5 @@ function createCompleteAppBlob(indexHtmlContent, projectStructure) {
         }
     }
 
-    return new Blob([indexHtmlContent], { type: 'text/html' });
+    return indexHtmlContent;
 }
