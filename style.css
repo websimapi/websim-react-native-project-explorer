@@ -99,10 +99,20 @@ body {
 #exported-members {
     font-size: 0.9em;
     color: #555;
+    min-height: 1.2em; /* Ensure space even when empty */
 }
 
 #exported-members strong {
     color: #333;
+}
+
+/* Container for the code display area */
+#code-display-container {
+    flex-grow: 1; /* Allows code display to take available space */
+    display: flex; /* Default visible state */
+    flex-direction: column;
+    min-height: 200px; /* Minimum height for code view */
+    overflow: hidden; /* Prevent its children from overflowing it */
 }
 
 #code-display {
@@ -114,8 +124,18 @@ body {
     background-color: #2d2d2d; /* Okaidia theme background */
     border-radius: 5px;
     padding: 15px;
-    min-height: 200px; /* Ensure it has some min height */
-    flex-shrink: 0; /* Prevent shrinking if build log is large */
+    flex-grow: 1; /* Allow pre/code to grow and scroll within container */
+    overflow: auto; /* Allow scrolling for code content */
+}
+
+/* Iframe for displaying built client */
+#iframe-client-viewer {
+    flex-grow: 1; /* Allows iframe to take available space */
+    width: 100%;
+    height: 100%; /* Takes height from flex container */
+    border: 1px solid #ccc;
+    display: none; /* Hidden by default */
+    min-height: 300px; /* Minimum height for client preview */
 }
 
 #build-project-button {
