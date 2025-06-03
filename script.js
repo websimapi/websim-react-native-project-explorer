@@ -28,8 +28,6 @@ export default function ${componentName}(props) {
     </View>
   );
 };
-// Also export as named if that's how it might be used, e.g. CreatePost
-export const ${componentName} = ${componentName}; 
 `;
 
     const correctImagePickerContent = `
