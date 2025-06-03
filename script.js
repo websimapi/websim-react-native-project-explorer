@@ -6,24 +6,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const iframeClientViewer = document.getElementById('iframe-client-viewer');
     const exportedMembersElement = document.getElementById('exported-members');
     let currentSelectedElement = null;
-    let buildInProgress = false; // Declare buildInProgress here
+    let buildInProgress = false; 
 
     const buildProjectButton = document.getElementById('build-project-button');
     const buildOutputContainer = document.getElementById('build-output-container');
     const buildLogElement = document.getElementById('build-log');
 
-    // Define known missing files that are part of the core structure
-    const placeholderFileContent = (fileName) => `// Placeholder for ${fileName}\n// Content not provided in initial setup.\nexport default function ${fileName.replace('.tsx', '')}() { console.warn("${fileName} is a placeholder."); return null; };`;
+    const placeholderFileContent = (fileName, componentName = fileName.replace(/\.(tsx|ts|js)$/, '')) => 
+`// Placeholder for ${fileName}
+// Content not provided or simplified for this environment.
+import React from 'react';
+import { View, Text } from 'react-native-web';
+
+export default function ${componentName}(props) {
+  console.warn("${fileName} is a placeholder component.");
+  // Simple render to show it's a placeholder
+  return (
+    <View style={{padding: 8, margin: 4, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.02)'}}>
+      <Text style={{fontWeight: 'bold', fontSize: 12}}>${componentName} (Placeholder)</Text>
+      {/* <Text style={{fontSize: 10, color: 'gray'}}>Props: {JSON.stringify(Object.keys(props))}</Text> */}
+    </View>
+  );
+};
+// Also export as named if that's how it might be used, e.g. CreatePost
+export const ${componentName} = ${componentName}; 
+`;
 
     const correctImagePickerContent = `
 import React from 'react';
 import { View, Image, StyleSheet, Pressable, Text } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons'; // Assumed available
+import { MaterialCommunityIcons } from '@expo/vector-icons'; 
 
 interface ImagePickerProps {
-  images: string[]; // Array of image URIs
-  onAddImage: () => void; // Callback for adding an image
-  onRemoveImage: (index: number) => void; // Callback for removing an image
+  images: string[]; 
+  onAddImage: () => void; 
+  onRemoveImage: (index: number) => void; 
 }
 
 export function ImagePicker({ images, onAddImage, onRemoveImage }: ImagePickerProps) {
@@ -38,7 +55,7 @@ export function ImagePicker({ images, onAddImage, onRemoveImage }: ImagePickerPr
             </Pressable>
           </View>
         ))}
-        {images.length < 4 && ( // Limit to 4 images, for example
+        {images.length < 4 && ( 
           <Pressable style={styles.addButton} onPress={onAddImage}>
             <MaterialCommunityIcons name="image-plus" size={30} color="#6366f1" />
             <Text style={styles.addButtonText}>Add</Text>
@@ -55,26 +72,26 @@ const styles = StyleSheet.create({
   },
   imageGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap', // Allow wrapping
-    gap: 10, // Spacing between images
+    flexWrap: 'wrap', 
+    gap: 10, 
   },
   imageContainer: {
     position: 'relative',
-    width: 80, // Smaller preview
+    width: 80, 
     height: 80,
   },
   image: {
-    width: '100%', // Fill the container
-    height: '100%', // Fill the container
-    borderRadius: 4, // Optional: for softer edges
+    width: '100%', 
+    height: '100%', 
+    borderRadius: 4, 
   },
   removeButton: {
     position: 'absolute',
-    top: -8, // Adjust for visibility
-    right: -8, // Adjust for visibility
+    top: -8, 
+    right: -8, 
     backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12, // Make it circular
-    padding: 2, // Small padding around icon
+    borderRadius: 12, 
+    padding: 2, 
   },
   addButton: {
     width: 80,
@@ -82,15 +99,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#d1d5db', // A light gray for the border
+    borderColor: '#d1d5db', 
     borderStyle: 'dashed',
     borderRadius: 4,
-    backgroundColor: '#f9fafb', // A very light gray background
+    backgroundColor: '#f9fafb', 
   },
   addButtonText: {
     marginTop: 4,
     fontSize: 12,
-    color: '#6366f1', // Theme color
+    color: '#6366f1', 
   },
 });
 `;
@@ -98,7 +115,7 @@ const styles = StyleSheet.create({
     const initialProjectStructure = [
         { name: 'App.tsx', path: 'App.tsx', type: 'file' },
         { name: 'global.d.ts', path: 'global.d.ts', type: 'file' },
-        { name: 'index.js', path: 'index.js', type: 'file' }, // Expo entry point
+        { name: 'index.js', path: 'index.js', type: 'file' }, 
         {
             name: 'app', type: 'folder', children: [
                 { name: '_layout.tsx', path: 'app/_layout.tsx', type: 'file' },
@@ -123,10 +140,10 @@ const styles = StyleSheet.create({
                     name: 'components', type: 'folder', children: [
                         {
                             name: 'Feed', type: 'folder', children: [
-                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx'), isPlaceholder: true },
+                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx', 'CreatePost'), isPlaceholder: true },
                                 { name: 'FeedHeader.tsx', path: 'src/components/Feed/FeedHeader.tsx', type: 'file' },
                                 { name: 'FeedScreen.tsx', path: 'src/components/Feed/FeedScreen.tsx', type: 'file' },
-                                { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file', content: correctImagePickerContent }, // Use correct content
+                                { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file', content: correctImagePickerContent },
                                 { name: 'PostDetail.tsx', path: 'src/components/Feed/PostDetail.tsx', type: 'file' },
                                 { name: 'PostList.tsx', path: 'src/components/Feed/PostList.tsx', type: 'file' },
                                 { name: 'ShareModal.tsx', path: 'src/components/Feed/ShareModal.tsx', type: 'file' },
@@ -136,8 +153,8 @@ const styles = StyleSheet.create({
                 },
                 {
                     name: 'navigation', type: 'folder', children: [
-                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx'), isPlaceholder: true },
-                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx'), isPlaceholder: true },
+                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx', 'AuthStack'), isPlaceholder: true },
+                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx', 'MainStack'), isPlaceholder: true },
                     ]
                 },
                 {
@@ -157,7 +174,7 @@ const styles = StyleSheet.create({
         structure.forEach(item => {
             const li = document.createElement('li');
             li.classList.add('tree-item');
-            if (item.isPlaceholder || item.missing) { // Visually indicate missing/placeholder files
+            if (item.isPlaceholder || item.missing) { 
                 li.style.opacity = "0.6";
                 li.title = item.isPlaceholder ? "File content is a placeholder" : "File content not provided";
             }
@@ -206,7 +223,7 @@ const styles = StyleSheet.create({
         if (fileContentCache.has(filePath)) {
             return fileContentCache.get(filePath);
         }
-        // Check if content is already in item (e.g., for placeholders, build artifacts, or corrected files)
+        
         function findItem(structure, path) {
             for (const item of structure) {
                 if (item.path === path) return item;
@@ -217,11 +234,18 @@ const styles = StyleSheet.create({
             }
             return null;
         }
-        const item = findItem(currentProjectStructure, filePath);
-        if (item && typeof item.content === 'string') { // item.content might be defined but not a string (e.g. children)
+        const item = findItem(currentProjectStructure, filePath); // Check current structure for already loaded/modified content
+        if (item && typeof item.content === 'string') { 
             fileContentCache.set(filePath, item.content);
             return item.content;
         }
+        // If not in current, check initial (for original placeholders etc.)
+        const initialItem = findItem(initialProjectStructure, filePath);
+         if (initialItem && typeof initialItem.content === 'string') { 
+            fileContentCache.set(filePath, initialItem.content);
+            return initialItem.content;
+        }
+
 
         try {
             const response = await fetch(filePath);
@@ -252,7 +276,7 @@ const styles = StyleSheet.create({
 
             let codeToDisplay = await fetchFileContent(filePath);
             
-            if (item.isClientIndex) { // Special handling for the built client's index.html
+            if (item.isClientIndex) { 
                 selectedFileNameElement.textContent = `${fileName} (Live Preview from Build)`;
                 iframeClientViewer.srcdoc = codeToDisplay;
                 iframeClientViewer.style.display = 'block';
@@ -271,7 +295,7 @@ const styles = StyleSheet.create({
                 
                 codeDisplayElement.className = `language-${language}`;
                 Prism.highlightElement(codeDisplayElement);
-                if (!item.isBinary && !item.isClientIndex) { // Don't analyze binary files or client index for exports
+                if (!item.isBinary && !item.isClientIndex) { 
                    extractExportedMembers(codeToDisplay, extension);
                 } else if (item.isBinary) {
                     exportedMembersElement.innerHTML = '<em>Binary file content (simulated). Not analyzed.</em>';
@@ -334,9 +358,7 @@ const styles = StyleSheet.create({
         buildLogElement.textContent += `[${timestamp}] [${type}] ${message}\n`;
         buildLogElement.scrollTop = buildLogElement.scrollHeight;
     }
-
-    // Helper function to resolve relative paths to project-absolute paths
-    // Returns path without extension initially, caller should handle extension variants
+    
     function resolveProjectPath(relativePath, currentFilePath) {
         const currentDirSegments = currentFilePath.split('/').slice(0, -1);
         const pathSegments = relativePath.split('/');
@@ -353,141 +375,31 @@ const styles = StyleSheet.create({
         return resolvedSegments.join('/');
     }
     
-    // Helper to find a file in the project structure and determine its canonical path (for module ID generation)
-    // Tries common extensions.
     async function findCanonicalPath(importPath, currentFilePath, allProjectFiles) {
         const resolvedBase = resolveProjectPath(importPath, currentFilePath);
-        const extensionsToTry = ['.ts', '.tsx', '.js', '.json']; // Order matters
+        const extensionsToTry = ['.ts', '.tsx', '.js', '.json']; 
         for (const ext of extensionsToTry) {
             if (allProjectFiles.has(resolvedBase + ext)) return resolvedBase + ext;
         }
-        if (allProjectFiles.has(resolvedBase)) return resolvedBase; // If path already includes extension or is exact
+        if (allProjectFiles.has(resolvedBase)) return resolvedBase; 
         
-        // Try index files for directory imports
         for (const ext of extensionsToTry) {
              if (allProjectFiles.has(resolvedBase + '/index' + ext)) return resolvedBase + '/index' + ext;
         }
-        return null; // Not found
+        return null; 
     }
 
-
-    async function actualBuildProcess() {
-        if (buildInProgress) return;
-        buildInProgress = true;
-        buildProjectButton.disabled = true;
-        buildProjectButton.textContent = 'Building...';
-        buildLogElement.textContent = '';
-        logToBuildOutput("Build process started...");
-
-        currentProjectStructure = currentProjectStructure.filter(item => item.name !== 'build');
-        fileTreeElement.innerHTML = ''; // Clear old tree before re-rendering later
-        renderFileTree(fileTreeElement, currentProjectStructure); // Render tree without build folder first
-
-        const sourceFiles = [];
-        const allProjectFilePaths = new Set();
-
-        function collectSourceFiles(structure) {
-            for (const item of structure) {
-                if (item.type === 'file' && (item.name.endsWith('.ts') || item.name.endsWith('.tsx') || item.name.endsWith('.js'))) {
-                    sourceFiles.push(item);
-                    allProjectFilePaths.add(item.path);
-                }
-                if (item.children) {
-                    collectSourceFiles(item.children);
-                }
-            }
-        }
-        collectSourceFiles(initialProjectStructure); // Collect from the original pristine structure
-        logToBuildOutput(`Found ${sourceFiles.length} source files to process.`);
-
-        const transpiledFiles = [];
-        const importMapEntries = {
-            "imports": {
-                "react": "https://esm.sh/react@18.2.0",
-                "react-dom": "https://esm.sh/react-dom@18.2.0",
-                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-                "react-native": "https://esm.sh/react-native-web@0.19.9",
-                "react-native-web": "https://esm.sh/react-native-web@0.19.9",
-                "@expo/vector-icons": "./mock_expo_vector_icons.js",
-                "lucide-react-native": "./mock_lucide_react_native.js",
-                "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
-                "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
-                "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4",
-                "expo-router": "./mock_expo_router.js",
-                "expo": "./mock_expo.js" // Added entry for expo itself
-            }
-        };
-        
-        const babelOptions = {
-            presets: ['react', 'typescript'], 
-            filename: '', 
-            sourceType: 'module',
-        };
-
-        for (const file of sourceFiles) {
-            logToBuildOutput(`Processing ${file.path}...`);
-            try {
-                const originalCode = await fetchFileContent(file.path); // Ensures correct content is used
-                babelOptions.filename = file.path;
-                
-                let { code: transpiledCode } = Babel.transform(originalCode, babelOptions);
-
-                transpiledCode = transpiledCode.replace(/from\s+['"]react-native['"]/g, 'from "react-native-web"');
-                
-                const importRegex = /(import\s+.*?from\s+['"])([^'"]+)(['"])/g;
-                let match;
-                let tempCode = transpiledCode;
-                const replacements = [];
-
-                while((match = importRegex.exec(tempCode)) !== null) {
-                    const importPath = match[2];
-                    if (importPath.startsWith('./') || importPath.startsWith('../')) {
-                        const canonicalPath = await findCanonicalPath(importPath, file.path, allProjectFilePaths);
-                        if (canonicalPath) {
-                            const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
-                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`});
-                        } else {
-                            logToBuildOutput(`Could not resolve import '${importPath}' in ${file.path}`, "WARN");
-                        }
-                    }
-                }
-                for(let i = replacements.length - 1; i >= 0; i--) {
-                    const r = replacements[i];
-                    transpiledCode = transpiledCode.substring(0, r.startIndex) + r.newImport + transpiledCode.substring(r.endIndex);
-                }
-
-                const flatName = file.path.replace(/\//g, '_').replace(/\.(ts|tsx|js)$/, '.js');
-                const moduleId = `project_/${file.path.replace(/\.(ts|tsx|js)$/, '')}`;
-                
-                transpiledFiles.push({
-                    name: flatName,
-                    path: `build/web-client/${flatName}`,
-                    content: transpiledCode,
-                    type: 'file'
-                });
-                importMapEntries.imports[moduleId] = `./${flatName}`;
-            } catch (error) {
-                logToBuildOutput(`Error processing ${file.path}: ${error.message}`, "ERROR");
-                console.error(`Error processing ${file.path}:`, error);
-            }
-        }
-
-        // Add mock files
-        const mockExpoIconsContent = `
-export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO');
+    const mockExpoIconsContent = `
+export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px', verticalAlign: 'middle'} }, props.name ? props.name.substring(0,3) : 'ICO');
 export const Ionicons = MaterialCommunityIcons; 
-        `;
-        transpiledFiles.push({ name: 'mock_expo_vector_icons.js', path: 'build/web-client/mock_expo_vector_icons.js', content: mockExpoIconsContent, type: 'file' });
-
-        const mockLucideIconsContent = `
-const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, name.substring(0,3));
+    `;
+    const mockLucideIconsContent = `
+const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px', verticalAlign: 'middle'} }, name.substring(0,3));
 export const Home = createIcon('Home');
 export const Users = createIcon('Users');
 export const MessageCircle = createIcon('MessageCircle');
-        `;
-        transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' });
-
-        const mockExpoRouterContent = `
+    `;
+    const mockExpoRouterContent = `
 import React from 'react';
 
 const createMockComponent = (displayName) => {
@@ -521,52 +433,142 @@ export function useRouter() {
     back: () => console.log('Mock useRouter.back()'),
   };
 }
+// Default export for cases like import ExpoRouter from 'expo-router';
 export default { Stack, Tabs, SplashScreen, Link, useRouter };
 `;
-        transpiledFiles.push({ name: 'mock_expo_router.js', path: 'build/web-client/mock_expo_router.js', content: mockExpoRouterContent, type: 'file'});
-
-        const mockExpoContent = `
+    const mockExpoContent = `
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 export function registerRootComponent(App) {
   const rootElement = document.getElementById('root');
   if (rootElement) {
-    if (rootElement._reactRootContainer) {
-      console.log('Root already has a container, updating.')
-      rootElement._reactRootContainer.render(React.createElement(App));
+    // Simple check if already rendered, to avoid multiple roots on same element.
+    // This is a very basic check.
+    if (!rootElement._reactRootContainer) { 
+        const root = ReactDOM.createRoot(rootElement);
+        rootElement._reactRootContainer = root; 
+        root.render(React.createElement(App));
     } else {
-      const root = ReactDOM.createRoot(rootElement);
-      rootElement._reactRootContainer = root; // Store it for potential HMR or re-renders
-      root.render(React.createElement(App));
+        console.warn("registerRootComponent called multiple times or root already initialized.");
+        // Optionally, re-render if HMR or similar is intended.
+        // rootElement._reactRootContainer.render(React.createElement(App));
     }
   } else {
     console.error('Root element #root not found for registerRootComponent');
-    // Fallback: append to body if #root is missing (useful for some test environments)
-    // const tempRoot = document.createElement('div');
-    // tempRoot.id = 'root';
-    // document.body.appendChild(tempRoot);
-    // ReactDOM.createRoot(tempRoot).render(React.createElement(App));
   }
 }
 
-// Minimal mocks for other expo exports if they are used and cause errors
-export const Constants = {
-  expoVersion: 'mocked-expo-version',
-  platform: {},
-  manifest: { web: {} },
-};
-
-export const Linking = {
-    openURL: (url) => { console.log(\`Mock Linking.openURL: \${url}\`); return Promise.resolve(); },
-    addEventListener: () => ({ remove: () => {} }),
-};
-
-// Add other mocks as needed
+export const StatusBar = (props) => { console.log('Mock StatusBar:', props); return null; };
+export const Constants = { expoVersion: 'mocked-expo-version', platform: {}, manifest: { web: {} }, };
+export const Linking = { openURL: (url) => { console.log(\`Mock Linking.openURL: \${url}\`); return Promise.resolve(); }, addEventListener: () => ({ remove: () => {} }), };
 `;
-        transpiledFiles.push({ name: 'mock_expo.js', path: 'build/web-client/mock_expo.js', content: mockExpoContent, type: 'file'});
 
 
+    async function actualBuildProcess() {
+        if (buildInProgress) return;
+        buildInProgress = true;
+        buildProjectButton.disabled = true;
+        buildProjectButton.textContent = 'Building...';
+        buildLogElement.textContent = '';
+        logToBuildOutput("Build process started...");
+
+        currentProjectStructure = currentProjectStructure.filter(item => item.name !== 'build');
+        fileTreeElement.innerHTML = ''; 
+        renderFileTree(fileTreeElement, currentProjectStructure); 
+
+        const sourceFiles = [];
+        const allProjectFilePaths = new Set();
+
+        function collectSourceFiles(structure) {
+            for (const item of structure) {
+                if (item.type === 'file' && (item.path.endsWith('.ts') || item.path.endsWith('.tsx') || item.path.endsWith('.js'))) {
+                    sourceFiles.push(item); // Store the whole item
+                    allProjectFilePaths.add(item.path);
+                }
+                if (item.children) {
+                    collectSourceFiles(item.children);
+                }
+            }
+        }
+        collectSourceFiles(initialProjectStructure); 
+        logToBuildOutput(`Found ${sourceFiles.length} source files to process.`);
+
+        const importMapEntries = {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom": "https://esm.sh/react-dom@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "react-native": "https://esm.sh/react-native-web@0.19.9",
+                "react-native-web": "https://esm.sh/react-native-web@0.19.9",
+                "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
+                "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
+                "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4",
+            }
+        };
+        
+        const babelOptions = {
+            presets: ['react', 'typescript'], 
+            filename: '', 
+            sourceType: 'module',
+        };
+
+        for (const file of sourceFiles) {
+            logToBuildOutput(`Processing ${file.path}...`);
+            try {
+                const originalCode = await fetchFileContent(file.path); // Fetches potentially placeholder/corrected content
+                babelOptions.filename = file.path; 
+                
+                let { code: transpiledCode } = Babel.transform(originalCode, babelOptions);
+                transpiledCode = transpiledCode.replace(/from\s+['"]react-native['"]/g, 'from "react-native-web"');
+                
+                const importRegex = /(from\s+['"])(\.\/[^'"]+|\.\.\/[^'"]+)(['"])/g;
+                let match;
+                let tempCode = transpiledCode;
+                const replacements = [];
+
+                while((match = importRegex.exec(tempCode)) !== null) {
+                    const relativeImportPath = match[2];
+                    const canonicalPath = await findCanonicalPath(relativeImportPath, file.path, allProjectFilePaths);
+                    if (canonicalPath) {
+                        const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
+                        // Replace only the path part of the import statement
+                        replacements.push({startIndex: match.index + match[1].length, endIndex: match.index + match[1].length + relativeImportPath.length, newImportPath: moduleId});
+                    } else {
+                        logToBuildOutput(`Could not resolve import '${relativeImportPath}' in ${file.path}`, "WARN");
+                    }
+                }
+                
+                let offset = 0;
+                for(const r of replacements.sort((a,b) => a.startIndex - b.startIndex)) { // Apply in order
+                    transpiledCode = transpiledCode.substring(0, r.startIndex + offset) + r.newImportPath + transpiledCode.substring(r.endIndex + offset);
+                    offset += r.newImportPath.length - (r.endIndex - r.startIndex);
+                }
+
+                const projectModuleId = `project_/${file.path.replace(/\.(ts|tsx|js)$/, '')}`;
+                // Ensure UTF-8 characters are handled correctly for btoa
+                const dataUrl = `data:text/javascript;base64,${btoa(unescape(encodeURIComponent(transpiledCode)))}`;
+                importMapEntries.imports[projectModuleId] = dataUrl;
+
+            } catch (error) {
+                logToBuildOutput(`Error processing ${file.path}: ${error.message}`, "ERROR");
+                console.error(`Error processing ${file.path}:`, error, error.stack);
+            }
+        }
+        
+        const mocksToEmbed = [
+            { key: "@expo/vector-icons", content: mockExpoIconsContent },
+            { key: "lucide-react-native", content: mockLucideIconsContent },
+            { key: "expo-router", content: mockExpoRouterContent },
+            { key: "expo", content: mockExpoContent },
+        ];
+
+        for (const mock of mocksToEmbed) {
+            logToBuildOutput(`Embedding mock for ${mock.key}...`);
+            const dataUrl = `data:text/javascript;base64,${btoa(unescape(encodeURIComponent(mock.content)))}`;
+            importMapEntries.imports[mock.key] = dataUrl;
+        }
+        
         const entryPointOriginalPath = 'index.js'; 
         const entryPointModuleId = `project_/${entryPointOriginalPath.replace(/\.js$/, '')}`;
 
@@ -577,10 +579,9 @@ export const Linking = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Built React Native Web App</title>
-    <base href="./">
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
-        #root { display: flex; flex-direction: column; height: 100%; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: sans-serif; }
+        #root { display: flex; flex-direction: column; height: 100%; width: 100%; }
         /* Basic RNW style normalization */
         div[style*="flex-direction:row"] { box-sizing: border-box; }
         div[style*="flex-direction:column"] { box-sizing: border-box; }
@@ -590,13 +591,19 @@ ${JSON.stringify(importMapEntries, null, 2)}
     </script>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">Loading application...</div>
     <script type="module">
         import React from 'react';
-        window.React = React; // Make React globally available for some libraries if needed
+        window.React = React; 
 
         // The main entry point for the app
-        import '${entryPointModuleId}';
+        try {
+            await import('${entryPointModuleId}');
+            console.log("App entry point imported successfully.");
+        } catch (e) {
+            console.error("Error importing app entry point:", e);
+            document.getElementById('root').innerHTML = '<pre style="color:red; padding:10px;">Error loading application. Check console for details.\\n' + e.message + '\\n' + (e.stack || '') + '</pre>';
+        }
     </script>
 </body>
 </html>`;
@@ -610,7 +617,6 @@ ${JSON.stringify(importMapEntries, null, 2)}
                     type: 'folder',
                     children: [
                         { name: 'index.html', path: 'build/web-client/index.html', content: clientIndexHtmlContent, type: 'file', isClientIndex: true },
-                        ...transpiledFiles
                     ]
                 }
             ]
@@ -618,8 +624,7 @@ ${JSON.stringify(importMapEntries, null, 2)}
         currentProjectStructure.push(buildFolder);
         
         fileContentCache.set('build/web-client/index.html', clientIndexHtmlContent);
-        transpiledFiles.forEach(f => fileContentCache.set(f.path, f.content));
-
+        
         logToBuildOutput("Updating file tree with build artifacts...");
         fileTreeElement.innerHTML = ''; 
         renderFileTree(fileTreeElement, currentProjectStructure);
@@ -647,7 +652,8 @@ ${JSON.stringify(importMapEntries, null, 2)}
        loadFileContent(defaultFileToShow).then(() => {
            const items = fileTreeElement.querySelectorAll('.file-name');
            for (let item of items) {
-               if (item.textContent.includes(defaultFileToShow.name)) {
+               // Check if the text content *exactly* matches or *includes* if the name might have prefixes/suffixes from display
+               if (item.textContent === defaultFileToShow.name || item.textContent.includes(defaultFileToShow.name)) { 
                    if (item.parentElement) {
                        item.parentElement.classList.add('selected');
                        currentSelectedElement = item.parentElement;
