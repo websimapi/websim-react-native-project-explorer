@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.isClientIndex) { // Special handling for the built client's index.html
                 selectedFileNameElement.textContent = `${fileName} (Live Preview from Build)`;
                 // Create a blob URL for the complete application
-                const appBlob = createCompleteAppBlob(codeToDisplay);
+                const appBlob = createCompleteAppBlob(codeToDisplay, currentProjectStructure);
                 iframeClientViewer.src = URL.createObjectURL(appBlob);
                 iframeClientViewer.style.display = 'block';
                 exportedMembersElement.innerHTML = '<em>Displaying built client application.</em>';
@@ -581,7 +581,7 @@ ${JSON.stringify(importMapEntries, null, 2)}
 });
 
 // Helper function to create a complete app blob with all dependencies
-function createCompleteAppBlob(indexHtmlContent) {
+function createCompleteAppBlob(indexHtmlContent, projectStructure) {
     // Get all built files from the current project structure
     const builtFiles = new Map();
     
@@ -596,10 +596,7 @@ function createCompleteAppBlob(indexHtmlContent) {
             }
         }
     }
-    collectBuiltFiles(currentProjectStructure);
-
-    // Replace import map and module imports in index.html to use blob URLs
-    let modifiedHtml = indexHtmlContent;
+    collectBuiltFiles(projectStructure);
     
     // Create blob URLs for all JavaScript files
     const blobUrls = new Map();
@@ -616,7 +613,7 @@ function createCompleteAppBlob(indexHtmlContent) {
 
     // Update the import map in the HTML to use blob URLs
     const importMapRegex = /<script type="importmap">([\s\S]*?)<\/script>/;
-    const importMapMatch = modifiedHtml.match(importMapRegex);
+    const importMapMatch = indexHtmlContent.match(importMapRegex);
     
     if (importMapMatch) {
         try {
@@ -631,11 +628,11 @@ function createCompleteAppBlob(indexHtmlContent) {
             });
             
             const newImportMapScript = `<script type="importmap">\n${JSON.stringify(importMap, null, 2)}\n    </script>`;
-            modifiedHtml = modifiedHtml.replace(importMapRegex, newImportMapScript);
+            indexHtmlContent = indexHtmlContent.replace(importMapRegex, newImportMapScript);
         } catch (e) {
             console.error('Error parsing import map:', e);
         }
     }
 
-    return new Blob([modifiedHtml], { type: 'text/html' });
+    return new Blob([indexHtmlContent], { type: 'text/html' });
 }
