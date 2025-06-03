@@ -12,23 +12,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const buildOutputContainer = document.getElementById('build-output-container');
     const buildLogElement = document.getElementById('build-log');
 
-    const placeholderFileContent = (fileName, componentName = fileName.replace(/\.(tsx|ts|js)$/, '')) => 
-`// Placeholder for ${fileName}
-// Content not provided or simplified for this environment.
-import React from 'react';
-import { View, Text } from 'react-native-web';
-
-export default function ${componentName}(props) {
+    const placeholderFileContent = (fileName, componentName = fileName.replace(/\.(tsx|ts|js)$/, ''), exportType = 'default') => {
+      const componentBody = `
   console.warn("${fileName} is a placeholder component.");
   // Simple render to show it's a placeholder
   return (
     <View style={{padding: 8, margin: 4, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)', borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.02)'}}>
       <Text style={{fontWeight: 'bold', fontSize: 12}}>${componentName} (Placeholder)</Text>
+      {/* You can uncomment the line below to see props passed to placeholders */}
       {/* <Text style={{fontSize: 10, color: 'gray'}}>Props: {JSON.stringify(Object.keys(props))}</Text> */}
     </View>
-  );
-};
+  );`;
+
+      let exportBlock = '';
+      if (exportType === 'default') {
+        exportBlock = `export default function ${componentName}(props) {${componentBody}}`;
+      } else { // named
+        exportBlock = `export function ${componentName}(props) {${componentBody}}`;
+        // Optional: also provide a default export if the original component might have had one or for robustness.
+        // For CreatePost.tsx, the original file (seen in earlier prompts) used only a named export.
+        // So, we will stick to just the named export for 'named' type.
+      }
+
+      return `// Placeholder for ${fileName}
+// Content not provided or simplified for this environment.
+import React from 'react';
+import { View, Text } from 'react-native-web';
+
+${exportBlock}
 `;
+    };
 
     const correctImagePickerContent = `
 import React from 'react';
@@ -138,7 +151,7 @@ const styles = StyleSheet.create({
                     name: 'components', type: 'folder', children: [
                         {
                             name: 'Feed', type: 'folder', children: [
-                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx', 'CreatePost'), isPlaceholder: true },
+                                { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx', 'CreatePost', 'named'), isPlaceholder: true },
                                 { name: 'FeedHeader.tsx', path: 'src/components/Feed/FeedHeader.tsx', type: 'file' },
                                 { name: 'FeedScreen.tsx', path: 'src/components/Feed/FeedScreen.tsx', type: 'file' },
                                 { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file', content: correctImagePickerContent },
@@ -151,8 +164,8 @@ const styles = StyleSheet.create({
                 },
                 {
                     name: 'navigation', type: 'folder', children: [
-                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx', 'AuthStack'), isPlaceholder: true },
-                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx', 'MainStack'), isPlaceholder: true },
+                         { name: 'AuthStack.tsx', path: 'src/navigation/AuthStack.tsx', type: 'file', content: placeholderFileContent('AuthStack.tsx', 'AuthStack', 'default'), isPlaceholder: true },
+                         { name: 'MainStack.tsx', path: 'src/navigation/MainStack.tsx', type: 'file', content: placeholderFileContent('MainStack.tsx', 'MainStack', 'default'), isPlaceholder: true },
                     ]
                 },
                 {
