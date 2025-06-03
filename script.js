@@ -99,6 +99,91 @@ export default function ${componentName}(props) {
             ]
         }
     ];
+    // Add virtual module paths to initialProjectStructure for consistency if needed, or handle them separately.
+    const virtualModuleDefinitions = {
+        'virtual_modules/expo_vector_icons.js': `
+            import React from 'react';
+            export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO');
+            export const Ionicons = MaterialCommunityIcons;
+        `,
+        'virtual_modules/lucide_react_native.js': `
+            import React from 'react';
+            const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, name.substring(0,3));
+            export const Home = createIcon('Home');
+            export const Users = createIcon('Users');
+            export const MessageCircle = createIcon('MessageCircle');
+        `,
+        'virtual_modules/expo_router.js': `
+            import React from 'react';
+            const createMockComponent = (displayName) => {
+              const Comp = (props) => {
+                const style = props.screenOptions && props.screenOptions.headerShown === false ? {display: 'none'} : { border: '1px dashed #eee', padding: '5px', margin: '2px', flexGrow: 1};
+                let childrenToRender = props.children;
+                if (displayName === 'ExpoRouter.Stack' || displayName === 'ExpoRouter.Tabs') {
+                    if (React.Children.count(props.children) > 0) {
+                        childrenToRender = React.Children.map(props.children, child => {
+                            if (React.isValidElement(child) && (child.type.displayName === 'ExpoRouter.Stack.Screen' || child.type.displayName === 'ExpoRouter.Tabs.Screen')) {
+                                // For a tab navigator, only one child screen is typically active.
+                                // This simplified mock will render all, which is not ideal but shows structure.
+                                // A real tab navigator would handle visibility.
+                                const screenComponent = child.props.component || (() => child.props.children); // Support component prop or children
+                                const options = {...props.screenOptions, ...child.props.options};
+                                // If screen has a component prop, render that, apply options for title etc.
+                                if(child.props.name === 'index' && displayName === 'ExpoRouter.Tabs'){ // crude active tab
+                                   return React.createElement('div', {'data-name': `${displayName}-Screen-${child.props.name}`, style: {flexGrow:1}}, React.createElement(screenComponent, options));
+                                } else if (displayName === 'ExpoRouter.Stack') { // Stacks render one at a time too.
+                                   return React.createElement('div', {'data-name': `${displayName}-Screen-${child.props.name}`, style: {flexGrow:1}}, React.createElement(screenComponent, options));
+                                }
+                                return React.createElement('div', {'data-name': `${displayName}-Screen-${child.props.name} (inactive)`});
+                            }
+                            return child;
+                        });
+                    }
+                     return React.createElement('div', { 'data-name': displayName, style }, childrenToRender);
+                }
+                 if (displayName === 'ExpoRouter.Stack.Screen' || displayName === 'ExpoRouter.Tabs.Screen') {
+                    // Screens are not rendered directly by themselves but by their navigator parent.
+                    // The logic above in Stack/Tabs handles rendering their 'component'.
+                    return null; 
+                 }
+                return React.createElement(React.Fragment, null, props.children);
+              };
+              Comp.displayName = displayName;
+              return Comp;
+            };
+            export const Stack = createMockComponent('ExpoRouter.Stack');
+            Stack.Screen = createMockComponent('ExpoRouter.Stack.Screen');
+
+            export const Tabs = createMockComponent('ExpoRouter.Tabs');
+            Tabs.Screen = createMockComponent('ExpoRouter.Tabs.Screen');
+
+            export const SplashScreen = {
+                preventAutoHideAsync: () => { console.log('Mock SplashScreen.preventAutoHideAsync()'); return Promise.resolve(true); },
+                hideAsync: () => { console.log('Mock SplashScreen.hideAsync()'); return Promise.resolve(true); }
+            };
+
+            export const Link = (props) => {
+                const { href, children, ...rest } = props;
+                return React.createElement('a', { ...rest, href: href || '#', onClick: (e) => { e.preventDefault(); console.log('Mock Link to', href); alert('Mock link navigation to: ' + href); } }, children);
+            };
+
+            export function useRouter() { return { push: (path) => console.log(`Mock useRouter.push to: ${path}`), replace: (path) => console.log(`Mock useRouter.replace with: ${path}`), back: () => console.log('Mock useRouter.back()'), };}
+            export default Stack; 
+        `,
+        'virtual_modules/expo_core.js': `
+            export function registerRootComponent(component) {
+              const App = component;
+              const rootTag = document.getElementById('root');
+              if (rootTag) {
+                 const root = ReactDOMClient.createRoot(rootTag);
+                 root.render(React.createElement(App));
+              } else {
+                console.error("Root element #root not found for Expo's registerRootComponent mock.");
+              }
+            }
+        `
+    };
+
 
     let currentProjectStructure = JSON.parse(JSON.stringify(initialProjectStructure));
     const fileContentCache = new Map();
@@ -324,198 +409,110 @@ export default function ${componentName}(props) {
         fileTreeElement.innerHTML = ''; 
         renderFileTree(fileTreeElement, currentProjectStructure); 
 
-        const sourceFiles = [];
+        const sourceFileItems = [];
         const allProjectFilePathsSet = new Set();
 
-        function collectSourceFiles(structure, currentPath = '') {
+        function collectSourceFilesRecursive(structure) {
             for (const item of structure) {
                 const itemPath = item.path; 
                 allProjectFilePathsSet.add(itemPath); 
                 if (item.type === 'file' && (itemPath.endsWith('.ts') || itemPath.endsWith('.tsx') || itemPath.endsWith('.js')) && !itemPath.endsWith('.d.ts')) {
-                    sourceFiles.push(item);
+                    sourceFileItems.push(item);
                 }
                 if (item.children) {
-                    collectSourceFiles(item.children, itemPath);
+                    collectSourceFilesRecursive(item.children);
                 }
             }
         }
-        collectSourceFiles(currentProjectStructure);
-        logToBuildOutput(`Found ${sourceFiles.length} source files to process.`);
-        logToBuildOutput(`Known project files for resolution: ${Array.from(allProjectFilePathsSet).join(', ')}`, "DEBUG");
+        collectSourceFilesRecursive(currentProjectStructure);
+        
+        // Add virtual modules to the processing list and path set
+        Object.keys(virtualModuleDefinitions).forEach(virtualPath => {
+            sourceFileItems.push({
+                name: virtualPath.split('/').pop(),
+                path: virtualPath, // Use this as the canonical path/ID
+                content: virtualModuleDefinitions[virtualPath],
+                type: 'file',
+                isVirtual: true
+            });
+            allProjectFilePathsSet.add(virtualPath);
+        });
 
-        const transpiledFiles = [];
-        const importMapEntries = {
-            "imports": {
-                "react": "https://esm.sh/react@18.2.0",
-                "react-dom": "https://esm.sh/react-dom@18.2.0",
-                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-                "react-native": "https://esm.sh/react-native-web@0.19.9",
-                "react-native-web": "https://esm.sh/react-native-web@0.19.9",
-                "@expo/vector-icons": "./mock_expo_vector_icons.js",
-                "lucide-react-native": "./mock_lucide_react_native.js",
-                "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
-                "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
-                "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4",
-                "expo-router": "./mock_expo_router.js",
-                "expo": "./mock_expo_core.js"
-            }
+
+        logToBuildOutput(`Found ${sourceFileItems.length} source files (including virtual) to process.`);
+
+        const transpiledModuleFunctions = [];
+        
+        const specialImportToVirtualPath = {
+            '@expo/vector-icons': 'virtual_modules/expo_vector_icons.js',
+            'lucide-react-native': 'virtual_modules/lucide_react_native.js',
+            'expo-router': 'virtual_modules/expo_router.js',
+            'expo': 'virtual_modules/expo_core.js'
         };
 
         const babelOptions = {
-            presets: ['react', 'typescript'],
-            filename: '', 
-            sourceType: 'module',
+            presets: [
+                ['env', { modules: 'commonjs' }], // Transpile to CommonJS
+                'react',
+                'typescript'
+            ],
+            filename: '', // Will be set per file
+            sourceType: 'module', 
         };
 
-        for (const file of sourceFiles) {
-            logToBuildOutput(`Processing ${file.path}...`);
+        for (const fileItem of sourceFileItems) {
+            logToBuildOutput(`Processing ${fileItem.path}...`);
             try {
-                const originalCode = await fetchFileContent(file.path);
-                babelOptions.filename = file.path; 
+                const originalCode = fileItem.isVirtual ? fileItem.content : await fetchFileContent(fileItem.path);
+                babelOptions.filename = fileItem.path;
                 
                 let { code: transpiledCode } = Babel.transform(originalCode, babelOptions);
-
-                transpiledCode = transpiledCode.replace(/from\s+['"]react-native['"]/g, 'from "react-native-web"');
                 
-                const importRegex = /(import\s+(?:{[^}]+}\s*from\s+|[^;]+\s*from\s+|\s*)['"])([^'"]+)(['"])/g;
-                let match;
-                let tempCode = transpiledCode;
-                const replacements = [];
-
-                while((match = importRegex.exec(tempCode)) !== null) {
-                    const importPath = match[2];
-                    if (importPath.startsWith('./') || importPath.startsWith('../')) {
-                        const canonicalPath = await findCanonicalPath(importPath, file.path, allProjectFilePathsSet);
+                // Replace require statements
+                transpiledCode = transpiledCode.replace(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/g, (match, originalRequirePath) => {
+                    if (['react', 'react-dom', 'react-dom/client', 'react-native-web'].includes(originalRequirePath) || 
+                        originalRequirePath.startsWith('@react-navigation/') || 
+                        originalRequirePath === 'react-native-safe-area-context') {
+                        // These are external CDNs, __requireCDN will handle them
+                        return `__requireCDN('${originalRequirePath}')`;
+                    } else if (specialImportToVirtualPath[originalRequirePath]) {
+                        const virtualPath = specialImportToVirtualPath[originalRequirePath];
+                        const moduleId = `project_/${virtualPath.replace(/\.(ts|tsx|js)$/, '')}`;
+                        return `__requireInternal('${moduleId}')`;
+                    } else { // Project local file
+                        const canonicalPath = await findCanonicalPath(originalRequirePath, fileItem.path, allProjectFilePathsSet);
                         if (canonicalPath) {
                             const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
-                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`});
-                            logToBuildOutput(`Rewrote '${importPath}' to '${moduleId}' in ${file.path}`, "DEBUG");
+                            return `__requireInternal('${moduleId}')`;
                         } else {
-                            logToBuildOutput(`Could not resolve relative import '${importPath}' in ${file.path}`, "WARN");
+                            logToBuildOutput(`Could not resolve require ('${originalRequirePath}') in ${fileItem.path}. Leaving as is.`, "WARN");
+                            return match; // Leave it, might error at runtime but better than breaking build
                         }
-                    } else if (importPath.startsWith('@/') || importPath.startsWith('src/') || importPath.startsWith('app/') || importPath.startsWith('hooks/')) { 
-                         const canonicalPath = await findCanonicalPath(importPath, '', allProjectFilePathsSet); 
-                         if (canonicalPath) {
-                            const moduleId = `project_/${canonicalPath.replace(/\.(ts|tsx|js)$/, '')}`;
-                            replacements.push({startIndex: match.index, endIndex: match.index + match[0].length, newImport: `${match[1]}${moduleId}${match[3]}`});
-                            logToBuildOutput(`Rewrote '${importPath}' to '${moduleId}' in ${file.path}`, "DEBUG");
-                         } else {
-                            logToBuildOutput(`Could not resolve project-absolute import '${importPath}' in ${file.path}`, "WARN");
-                         }
                     }
-                }
-
-                for(let i = replacements.length - 1; i >= 0; i--) {
-                    const r = replacements[i];
-                    transpiledCode = transpiledCode.substring(0, r.startIndex) + r.newImport + transpiledCode.substring(r.endIndex);
-                }
-
-                const flatName = file.path.replace(/\//g, '_').replace(/\.(ts|tsx|js)$/, '.js');
-                const moduleId = `project_/${file.path.replace(/\.(ts|tsx|js)$/, '')}`;
-                
-                transpiledFiles.push({
-                    name: flatName,
-                    path: `build/web-client/${flatName}`,
-                    content: transpiledCode,
-                    type: 'file'
                 });
-                importMapEntries.imports[moduleId] = `./${flatName}`;
+                
+                // CommonJS module ID for our system
+                const projectModuleId = `project_/${fileItem.path.replace(/\.(ts|tsx|js)$/, '')}`;
+
+                const wrappedModule = `
+window.__projectModules['${projectModuleId}'] = function(module, exports, __requireInternal, __requireCDN) {
+try {
+${transpiledCode}
+} catch(e) {
+  console.error("Error executing module ${projectModuleId}:", e);
+  throw e;
+}
+};`;
+                transpiledModuleFunctions.push(wrappedModule);
+                fileContentCache.set(`transpiled/${projectModuleId}`, wrappedModule); // Cache the wrapped module string
+
             } catch (error) {
-                logToBuildOutput(`Error processing ${file.path}: ${error.message} \n ${error.stack}`, "ERROR");
-                console.error(`Error processing ${file.path}:`, error);
+                logToBuildOutput(`Error processing ${fileItem.path}: ${error.message} \n ${error.stack}`, "ERROR");
+                console.error(`Error processing ${fileItem.path}:`, error);
             }
         }
-
-        const mockExpoIconsContent = `
-export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO');
-export const Ionicons = MaterialCommunityIcons;
-        `;
-        transpiledFiles.push({ name: 'mock_expo_vector_icons.js', path: 'build/web-client/mock_expo_vector_icons.js', content: mockExpoIconsContent, type: 'file' });
-
-        const mockLucideIconsContent = `
-import React from 'react';
-const createIcon = (name) => (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, name.substring(0,3));
-export const Home = createIcon('Home');
-export const Users = createIcon('Users');
-export const MessageCircle = createIcon('MessageCircle');
-        `;
-        transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' });
-
-        const mockExpoRouterContent = `
-import React from 'react';
-
-const createMockComponent = (displayName) => {
-  const Comp = (props) => {
-    // console.log(\`Mock <\${displayName}> rendered with props:\`, props, "Children:", props.children);
-    const style = props.screenOptions && props.screenOptions.headerShown === false ? {display: 'none'} : {};
-    if (displayName === 'ExpoRouter.Stack' || displayName === 'ExpoRouter.Tabs') {
-         // Pass navigator specific props like screenOptions down if children are Screens
-        let childrenToRender = props.children;
-        if (React.Children.count(props.children) > 0) {
-            childrenToRender = React.Children.map(props.children, child => {
-                if (React.isValidElement(child) && (child.type.displayName === 'ExpoRouter.Stack.Screen' || child.type.displayName === 'ExpoRouter.Tabs.Screen')) {
-                    return React.cloneElement(child, { ...props.screenOptions, ...child.props.options });
-                }
-                return child;
-            });
-        }
-        return React.createElement('div', { 'data-name': displayName, style }, childrenToRender);
-    }
-     if (displayName === 'ExpoRouter.Stack.Screen' || displayName === 'ExpoRouter.Tabs.Screen') {
-        // Screens might not render directly, their component prop is used by navigator
-        // For simplicity, if a component is passed, try to render it.
-        if (props.component) return React.createElement(props.component);
-        if (props.children) return React.createElement(React.Fragment, null, props.children);
-        return React.createElement('div', {'data-name': displayName + " (empty)"});
-     }
-    return React.createElement(React.Fragment, null, props.children);
-  };
-  Comp.displayName = displayName;
-  return Comp;
-};
-
-export const Stack = createMockComponent('ExpoRouter.Stack');
-Stack.Screen = createMockComponent('ExpoRouter.Stack.Screen');
-
-export const Tabs = createMockComponent('ExpoRouter.Tabs');
-Tabs.Screen = createMockComponent('ExpoRouter.Tabs.Screen');
-
-
-export const SplashScreen = {
-    preventAutoHideAsync: () => { console.log('Mock SplashScreen.preventAutoHideAsync()'); return Promise.resolve(true); },
-    hideAsync: () => { console.log('Mock SplashScreen.hideAsync()'); return Promise.resolve(true); }
-};
-
-export const Link = (props) => {
-    const { href, children, ...rest } = props;
-    return React.createElement('a', { ...rest, href: href || '#', onClick: (e) => { e.preventDefault(); console.log('Mock Link to', href); alert('Mock link navigation to: ' + href); } }, children);
-};
-
-export function useRouter() {
-  return {
-    push: (path) => console.log(\`Mock useRouter.push to: \${path}\`),
-    replace: (path) => console.log(\`Mock useRouter.replace with: \${path}\`),
-    back: () => console.log('Mock useRouter.back()'),
-  };
-}
-export default Stack; 
-
-`;
-        transpiledFiles.push({ name: 'mock_expo_router.js', path: 'build/web-client/mock_expo_router.js', content: mockExpoRouterContent, type: 'file'});
-
-        const mockExpoCoreContent = `
-// Mock for 'expo' package
-import { AppRegistry } from 'react-native-web'; // Use react-native-web's AppRegistry
-
-export function registerRootComponent(component) {
-  AppRegistry.registerComponent('main', () => component);
-  AppRegistry.runApplication('main', { rootTag: document.getElementById('root') });
-}
-`;
-        transpiledFiles.push({ name: 'mock_expo_core.js', path: 'build/web-client/mock_expo_core.js', content: mockExpoCoreContent, type: 'file' });
-
-
-        const entryPointOriginalPath = 'index.js'; 
+        
+        const entryPointOriginalPath = 'index.js'; // Your main entry file
         const entryPointModuleId = `project_/${entryPointOriginalPath.replace(/\.js$/, '')}`;
 
         const clientIndexHtmlContent = `
@@ -525,24 +522,105 @@ export function registerRootComponent(component) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>Built React Native Web App</title>
-    <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; background-color: #f0f2f5;}
-        #root { display: flex; flex-direction: column; height: 100%; }
-        div[style*="flex-direction:row"] { box-sizing: border-box; }
-        div[style*="flex-direction:column"] { box-sizing: border-box; }
-    </style>
-    <script type="importmap">
-${JSON.stringify(importMapEntries, null, 2)}
+    <style> body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; background-color: #FFF;} #root { display: flex; flex-direction: column; height: 100%; box-sizing: border-box;} </style>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script> 
+        // Make ReactDOM.createRoot available via a consistent name, similar to older examples if needed.
+        var ReactDOMClient = ReactDOM; 
+        var ReactNativeWeb = { /* Minimal stub, real RNW UMD is complex or use ESM */ 
+          StyleSheet: { create: (obj) => obj },
+          View: 'div', Text: 'span', Pressable: 'button', Image: 'img', ScrollView: 'div', TextInput: 'input',
+          AppRegistry: { 
+            registerComponent: (appKey, getComponentFunc) => { 
+              window._rnwAppRegistry = window._rnwAppRegistry || {};
+              window._rnwAppRegistry[appKey] = getComponentFunc;
+            },
+            runApplication: (appKey, appParameters) => {
+                if(window._rnwAppRegistry && window._rnwAppRegistry[appKey]){
+                    const AppComponent = window._rnwAppRegistry[appKey]();
+                    const root = ReactDOMClient.createRoot(appParameters.rootTag);
+                    root.render(React.createElement(AppComponent));
+                }
+            }
+          }
+        }; 
+        // Mock global for @react-navigation
+        var ReactNavigationNative = { NavigationContainer: (props) => React.createElement('div', {'data-name': 'NavigationContainer'}, props.children) };
+        var ReactNavigationNativeStack = { createNativeStackNavigator: () => ({ Navigator: (props) => React.createElement('div', {'data-name': 'StackNavigator'}, props.children), Screen: (props) => null /* Screen components are declarative */ }) };
+        var ReactNativeSafeAreaContext = { SafeAreaProvider: (props) => React.createElement(React.Fragment, null, props.children), useSafeAreaInsets: () => ({top:0, bottom:0, left:0, right:0}) };
+
     </script>
 </head>
 <body>
     <div id="root" style="height: 100vh;"></div>
-    <script type="module">
-        import React from 'react';
-        import ReactDOM from 'react-dom/client';
-        window.React = React; 
-        
-        import '${entryPointModuleId}';
+    <script type="text/javascript">
+        window.__projectModules = {};
+        window.__initializedModules = {}; // To track initialized modules and prevent re-initialization loops
+
+        function __requireCDN(moduleId) {
+            // console.log('CDN require:', moduleId);
+            switch(moduleId) {
+                case 'react': return window.React;
+                case 'react-dom': return window.ReactDOM;
+                case 'react-dom/client': return window.ReactDOMClient;
+                case 'react-native-web': return window.ReactNativeWeb; // Using our basic mock
+                case '@expo/vector-icons': return window.__projectModules['project_/virtual_modules/expo_vector_icons']; // Handled by internal require now
+                case 'lucide-react-native': return window.__projectModules['project_/virtual_modules/lucide_react_native'];
+                case '@react-navigation/native': return ReactNavigationNative;
+                case '@react-navigation/native-stack': return ReactNavigationNativeStack;
+                case 'react-native-safe-area-context': return ReactNativeSafeAreaContext;
+                case 'expo-router': return window.__projectModules['project_/virtual_modules/expo_router'];
+                case 'expo': return window.__projectModules['project_/virtual_modules/expo_core'];
+                default:
+                    console.warn('Unknown CDN module required:', moduleId);
+                    throw new Error('Unknown CDN module: ' + moduleId);
+            }
+        }
+
+        function __requireInternal(moduleId) {
+            // console.log('Internal require:', moduleId);
+            if (window.__initializedModules[moduleId]) {
+                // console.log('Returning cached module:', moduleId);
+                return window.__initializedModules[moduleId].exports;
+            }
+
+            if (!window.__projectModules[moduleId]) {
+                console.error('Module not found (not defined):', moduleId, 'Available:', Object.keys(window.__projectModules));
+                throw new Error('Module not found: ' + moduleId);
+            }
+
+            const moduleFactory = window.__projectModules[moduleId];
+            const module = { exports: {} };
+            window.__initializedModules[moduleId] = module; // Cache before execution for circular deps
+
+            try {
+                 // console.log('Initializing module:', moduleId);
+                moduleFactory(module, module.exports, __requireInternal, __requireCDN);
+            } catch(e) {
+                console.error(`Error initializing module ${moduleId}:`, e, e.stack);
+                delete window.__initializedModules[moduleId]; // Remove from cache on error
+                throw e;
+            }
+            // console.log('Finished initializing module:', moduleId, module.exports);
+            return module.exports;
+        }
+
+        // --- All transpiled and wrapped module functions will be inserted below ---
+        ${transpiledModuleFunctions.join('\n\n')}
+        // --- End of module definitions ---
+
+        // Run the entry point
+        try {
+            console.log('Executing entry point: ${entryPointModuleId}');
+            __requireInternal('${entryPointModuleId}');
+        } catch (e) {
+            console.error("Error running application entry point:", e);
+            const rootDiv = document.getElementById('root');
+            if (rootDiv) {
+                rootDiv.innerHTML = '<div style="color:red; padding: 20px;"><h1>Application Error</h1><p>Failed to start. Check console for details.</p><pre>' + e.stack + '</pre></div>';
+            }
+        }
     </script>
 </body>
 </html>`;
@@ -556,7 +634,7 @@ ${JSON.stringify(importMapEntries, null, 2)}
                     type: 'folder',
                     children: [
                         { name: 'index.html', path: 'build/web-client/index.html', content: clientIndexHtmlContent, type: 'file', isClientIndex: true },
-                        ...transpiledFiles
+                        // No other JS files here as they are all bundled into index.html's script tag
                     ]
                 }
             ]
@@ -564,7 +642,7 @@ ${JSON.stringify(importMapEntries, null, 2)}
         currentProjectStructure.push(buildFolder);
         
         fileContentCache.set('build/web-client/index.html', clientIndexHtmlContent);
-        transpiledFiles.forEach(f => fileContentCache.set(f.path, f.content));
+        // No individual transpiled files to cache here for the build output, they are bundled.
 
         logToBuildOutput("Updating file tree with build artifacts...");
         fileTreeElement.innerHTML = ''; 
