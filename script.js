@@ -15,6 +15,86 @@ document.addEventListener('DOMContentLoaded', () => {
     // Define known missing files that are part of the core structure
     const placeholderFileContent = (fileName) => `// Placeholder for ${fileName}\n// Content not provided in initial setup.\nexport default function ${fileName.replace('.tsx', '')}() { console.warn("${fileName} is a placeholder."); return null; };`;
 
+    const correctImagePickerContent = `
+import React from 'react';
+import { View, Image, StyleSheet, Pressable, Text } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons'; // Assumed available
+
+interface ImagePickerProps {
+  images: string[]; // Array of image URIs
+  onAddImage: () => void; // Callback for adding an image
+  onRemoveImage: (index: number) => void; // Callback for removing an image
+}
+
+export function ImagePicker({ images, onAddImage, onRemoveImage }: ImagePickerProps) {
+  return (
+    <View style={styles.container}>
+      <View style={styles.imageGrid}>
+        {images.map((uri, index) => (
+          <View key={index} style={styles.imageContainer}>
+            <Image source={{ uri }} style={styles.image} onError={() => console.log('Error loading image in picker:', uri)} />
+            <Pressable style={styles.removeButton} onPress={() => onRemoveImage(index)}>
+              <MaterialCommunityIcons name="close-circle" size={24} color="rgba(0,0,0,0.7)" />
+            </Pressable>
+          </View>
+        ))}
+        {images.length < 4 && ( // Limit to 4 images, for example
+          <Pressable style={styles.addButton} onPress={onAddImage}>
+            <MaterialCommunityIcons name="image-plus" size={30} color="#6366f1" />
+            <Text style={styles.addButtonText}>Add</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginVertical: 10,
+  },
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap', // Allow wrapping
+    gap: 10, // Spacing between images
+  },
+  imageContainer: {
+    position: 'relative',
+    width: 80, // Smaller preview
+    height: 80,
+  },
+  image: {
+    width: '100%', // Fill the container
+    height: '100%', // Fill the container
+    borderRadius: 4, // Optional: for softer edges
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -8, // Adjust for visibility
+    right: -8, // Adjust for visibility
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12, // Make it circular
+    padding: 2, // Small padding around icon
+  },
+  addButton: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db', // A light gray for the border
+    borderStyle: 'dashed',
+    borderRadius: 4,
+    backgroundColor: '#f9fafb', // A very light gray background
+  },
+  addButtonText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6366f1', // Theme color
+  },
+});
+`;
+
     const initialProjectStructure = [
         { name: 'App.tsx', path: 'App.tsx', type: 'file' },
         { name: 'global.d.ts', path: 'global.d.ts', type: 'file' },
@@ -46,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 { name: 'CreatePost.tsx', path: 'src/components/Feed/CreatePost.tsx', type: 'file', content: placeholderFileContent('CreatePost.tsx'), isPlaceholder: true },
                                 { name: 'FeedHeader.tsx', path: 'src/components/Feed/FeedHeader.tsx', type: 'file' },
                                 { name: 'FeedScreen.tsx', path: 'src/components/Feed/FeedScreen.tsx', type: 'file' },
-                                { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file' },
+                                { name: 'ImagePicker.tsx', path: 'src/components/Feed/ImagePicker.tsx', type: 'file', content: correctImagePickerContent }, // Use correct content
                                 { name: 'PostDetail.tsx', path: 'src/components/Feed/PostDetail.tsx', type: 'file' },
                                 { name: 'PostList.tsx', path: 'src/components/Feed/PostList.tsx', type: 'file' },
                                 { name: 'ShareModal.tsx', path: 'src/components/Feed/ShareModal.tsx', type: 'file' },
@@ -126,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (fileContentCache.has(filePath)) {
             return fileContentCache.get(filePath);
         }
-        // Check if content is already in item (e.g., for placeholders or build artifacts)
+        // Check if content is already in item (e.g., for placeholders, build artifacts, or corrected files)
         function findItem(structure, path) {
             for (const item of structure) {
                 if (item.path === path) return item;
@@ -138,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return null;
         }
         const item = findItem(currentProjectStructure, filePath);
-        if (item && item.content) {
+        if (item && typeof item.content === 'string') { // item.content might be defined but not a string (e.g. children)
             fileContentCache.set(filePath, item.content);
             return item.content;
         }
@@ -170,12 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
             iframeClientViewer.style.display = 'none';
             codeDisplayContainer.style.display = 'none';
 
-            let codeToDisplay;
-            if (item.content) { // Directly use content if available (build artifacts, placeholders)
-                codeToDisplay = item.content;
-            } else { // Fetch project files
-                codeToDisplay = await fetchFileContent(filePath);
-            }
+            let codeToDisplay = await fetchFileContent(filePath);
             
             if (item.isClientIndex) { // Special handling for the built client's index.html
                 selectedFileNameElement.textContent = `${fileName} (Live Preview from Build)`;
@@ -322,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        collectSourceFiles(currentProjectStructure);
+        collectSourceFiles(initialProjectStructure); // Collect from the original pristine structure
         logToBuildOutput(`Found ${sourceFiles.length} source files to process.`);
 
         const transpiledFiles = [];
@@ -338,28 +413,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 "@react-navigation/native": "https://esm.sh/@react-navigation/native@6.1.9",
                 "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@6.9.17",
                 "react-native-safe-area-context": "https://esm.sh/react-native-safe-area-context@4.7.4",
-                "expo-router": "./mock_expo_router.js" // Added entry for expo-router
+                "expo-router": "./mock_expo_router.js",
+                "expo": "./mock_expo.js" // Added entry for expo itself
             }
         };
         
         const babelOptions = {
-            presets: ['react', 'typescript'], // env preset adds too much for simple es module output
-            filename: '', // will be set per file
+            presets: ['react', 'typescript'], 
+            filename: '', 
             sourceType: 'module',
         };
 
         for (const file of sourceFiles) {
             logToBuildOutput(`Processing ${file.path}...`);
             try {
-                const originalCode = file.content || await fetchFileContent(file.path);
+                const originalCode = await fetchFileContent(file.path); // Ensures correct content is used
                 babelOptions.filename = file.path;
                 
                 let { code: transpiledCode } = Babel.transform(originalCode, babelOptions);
 
-                // Rewrite react-native to react-native-web (Babel plugin would be better but this is simpler for now)
                 transpiledCode = transpiledCode.replace(/from\s+['"]react-native['"]/g, 'from "react-native-web"');
                 
-                // Rewrite relative imports to use module IDs (which will be mapped in importmap)
                 const importRegex = /(import\s+.*?from\s+['"])([^'"]+)(['"])/g;
                 let match;
                 let tempCode = transpiledCode;
@@ -377,12 +451,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
-                // Apply replacements from end to start to not mess up indices
                 for(let i = replacements.length - 1; i >= 0; i--) {
                     const r = replacements[i];
                     transpiledCode = transpiledCode.substring(0, r.startIndex) + r.newImport + transpiledCode.substring(r.endIndex);
                 }
-
 
                 const flatName = file.path.replace(/\//g, '_').replace(/\.(ts|tsx|js)$/, '.js');
                 const moduleId = `project_/${file.path.replace(/\.(ts|tsx|js)$/, '')}`;
@@ -403,8 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add mock files
         const mockExpoIconsContent = `
 export const MaterialCommunityIcons = (props) => React.createElement('span', { style: {display: 'inline-block', width: props.size || 24, height: props.size || 24, color: props.color, border:'1px dotted #ccc', textAlign:'center', lineHeight: (props.size || 24)+'px', fontSize: (props.size || 24)*0.5+'px', borderRadius: '3px', margin: '2px'} }, props.name ? props.name.substring(0,3) : 'ICO');
-export const Ionicons = MaterialCommunityIcons; // common alias
-// Add other icon sets if needed by the app
+export const Ionicons = MaterialCommunityIcons; 
         `;
         transpiledFiles.push({ name: 'mock_expo_vector_icons.js', path: 'build/web-client/mock_expo_vector_icons.js', content: mockExpoIconsContent, type: 'file' });
 
@@ -413,17 +484,14 @@ const createIcon = (name) => (props) => React.createElement('span', { style: {di
 export const Home = createIcon('Home');
 export const Users = createIcon('Users');
 export const MessageCircle = createIcon('MessageCircle');
-// Add other icons if needed by the app
         `;
         transpiledFiles.push({ name: 'mock_lucide_react_native.js', path: 'build/web-client/mock_lucide_react_native.js', content: mockLucideIconsContent, type: 'file' });
 
-        // Add mock for expo-router
         const mockExpoRouterContent = `
 import React from 'react';
 
 const createMockComponent = (displayName) => {
   const Comp = (props) => {
-    // console.log(\`Mock <\${displayName}> rendered with props:\`, props);
     return React.createElement(React.Fragment, null, props.children);
   };
   Comp.displayName = displayName;
@@ -443,7 +511,6 @@ export const SplashScreen = {
 
 export const Link = (props) => {
     const { href, children, ...rest } = props;
-    // Basic anchor tag mock for web
     return React.createElement('a', { ...rest, href, onClick: (e) => { e.preventDefault(); console.log('Mock Link to', href); alert('Mock link navigation to: ' + href); } }, children);
 };
 
@@ -452,24 +519,55 @@ export function useRouter() {
     push: (path) => console.log(\`Mock useRouter.push to: \${path}\`),
     replace: (path) => console.log(\`Mock useRouter.replace with: \${path}\`),
     back: () => console.log('Mock useRouter.back()'),
-    // Add other methods if they appear in errors during runtime
   };
 }
-
-// Default export might be expected by some parts of expo-router (e.g. entry point)
-// but components are typically named exports.
-export default {
-  Stack,
-  Tabs,
-  SplashScreen,
-  Link,
-  useRouter
-};
+export default { Stack, Tabs, SplashScreen, Link, useRouter };
 `;
         transpiledFiles.push({ name: 'mock_expo_router.js', path: 'build/web-client/mock_expo_router.js', content: mockExpoRouterContent, type: 'file'});
 
+        const mockExpoContent = `
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 
-        const entryPointOriginalPath = 'index.js'; // Expo's typical entry point
+export function registerRootComponent(App) {
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    if (rootElement._reactRootContainer) {
+      console.log('Root already has a container, updating.')
+      rootElement._reactRootContainer.render(React.createElement(App));
+    } else {
+      const root = ReactDOM.createRoot(rootElement);
+      rootElement._reactRootContainer = root; // Store it for potential HMR or re-renders
+      root.render(React.createElement(App));
+    }
+  } else {
+    console.error('Root element #root not found for registerRootComponent');
+    // Fallback: append to body if #root is missing (useful for some test environments)
+    // const tempRoot = document.createElement('div');
+    // tempRoot.id = 'root';
+    // document.body.appendChild(tempRoot);
+    // ReactDOM.createRoot(tempRoot).render(React.createElement(App));
+  }
+}
+
+// Minimal mocks for other expo exports if they are used and cause errors
+export const Constants = {
+  expoVersion: 'mocked-expo-version',
+  platform: {},
+  manifest: { web: {} },
+};
+
+export const Linking = {
+    openURL: (url) => { console.log(\`Mock Linking.openURL: \${url}\`); return Promise.resolve(); },
+    addEventListener: () => ({ remove: () => {} }),
+};
+
+// Add other mocks as needed
+`;
+        transpiledFiles.push({ name: 'mock_expo.js', path: 'build/web-client/mock_expo.js', content: mockExpoContent, type: 'file'});
+
+
+        const entryPointOriginalPath = 'index.js'; 
         const entryPointModuleId = `project_/${entryPointOriginalPath.replace(/\.js$/, '')}`;
 
         const clientIndexHtmlContent = `
@@ -493,11 +591,8 @@ ${JSON.stringify(importMapEntries, null, 2)}
 <body>
     <div id="root"></div>
     <script type="module">
-        // Ensure React and ReactDOM are globally available for some RNW internals if not fully ESM compatible
         import React from 'react';
-        import ReactDOM from 'react-dom/client';
-        window.React = React;
-        // window.ReactDOM = ReactDOM; // ReactDOM/client doesn't expose traditional global
+        window.React = React; // Make React globally available for some libraries if needed
 
         // The main entry point for the app
         import '${entryPointModuleId}';
@@ -521,13 +616,11 @@ ${JSON.stringify(importMapEntries, null, 2)}
         };
         currentProjectStructure.push(buildFolder);
         
-        // fileContentCache needs to be updated for build artifacts so they can be viewed
         fileContentCache.set('build/web-client/index.html', clientIndexHtmlContent);
         transpiledFiles.forEach(f => fileContentCache.set(f.path, f.content));
 
-
         logToBuildOutput("Updating file tree with build artifacts...");
-        fileTreeElement.innerHTML = ''; // Clear old tree
+        fileTreeElement.innerHTML = ''; 
         renderFileTree(fileTreeElement, currentProjectStructure);
         
         logToBuildOutput("Build process finished successfully.", "SUCCESS");
@@ -537,14 +630,6 @@ ${JSON.stringify(importMapEntries, null, 2)}
         buildProjectButton.disabled = false;
         buildProjectButton.textContent = 'Build Project';
     }
-
-
-    // Remove simulation logic
-    // let currentLogIndex = 0; // No longer needed for simulation
-    // let currentLogsArray = []; // No longer needed for simulation
-
-    // function appendLogEntry() { ... } // No longer needed for simulation
-    // function generateMockFileContent() { ... } // No longer needed for simulation
 
     if (buildProjectButton) {
         buildProjectButton.addEventListener('click', actualBuildProcess);
@@ -556,7 +641,6 @@ ${JSON.stringify(importMapEntries, null, 2)}
          buildLogElement.textContent = 'Click "Build Project" to start the actual web client build.\n';
     }
 
-    // Auto-select App.tsx or index.js initially if desired
     const defaultFileToShow = currentProjectStructure.find(f => f.path === 'index.js') || currentProjectStructure.find(f => f.path === 'App.tsx');
     if (defaultFileToShow) {
        loadFileContent(defaultFileToShow).then(() => {
